@@ -45,7 +45,7 @@ class MechanismDecoder:
             dtype=masked_logits.dtype,
             device=masked_logits.device,
         )
-        masked_logits = masked_logits + 0.10 * torch.log(target_counts.clamp_min(1.0))
+        masked_logits = masked_logits + 0.20 * torch.log(target_counts.clamp_min(1.0))
         predicted = torch.argmax(masked_logits, dim=-1).detach().cpu().numpy().astype(np.int64)
         full_table = predicted.reshape(tuple([self.max_messages] * scr.n_agents))
         outcome_table = np.zeros(message_sizes, dtype=np.int64)

@@ -1,15 +1,23 @@
-"""Fixed SCR generator for mechanism-synthesis autoresearch.
+"""Fixed hard SCR generator for learned mechanism synthesis.
 
-The positive split deliberately contains implementable finite SCR families:
-- dictator SCRs: F(theta) is the top alternative of one decisive agent
-- constant SCRs: F(theta) is the same alternative at every state
+Positive SCRs are sampled from a broad family of singleton social choice
+functions. At every state, the chosen alternative is made the strict unanimous
+top alternative, so a finite report/challenge mechanism can implement it.
 
-Negative controls are singleton SCRs that are neither constant nor any
-agent-top rule on the sampled finite domain.
+The training label is not a template id. It is the full canonical mechanism
+outcome table on a fixed finite message scaffold:
+
+- message 0..S-1: report a state
+- message S..2S-1: challenge a state
+
+The learner must map SCR tensors to this outcome table. Verification never
+uses the teacher table; it only enumerates pure Nash equilibria of the
+checkpointed synthesizer's generated mechanism.
 """
 
 from __future__ import annotations
 
+from itertools import product
 from typing import Any
 
 import numpy as np
@@ -24,6 +32,14 @@ SPLIT_OFFSETS = {
 }
 
 
+def message_size(domain: Domain) -> int:
+    return 2 * domain.n_states
+
+
+def message_sizes(domain: Domain) -> tuple[int, ...]:
+    return tuple([message_size(domain)] * domain.n_agents)
+
+
 def _config_seed(config: dict[str, Any]) -> int:
     dataset = config.get("dataset", {})
     training = config.get("training", {})
@@ -35,51 +51,101 @@ def _rng_for_split(seed: int, split: str) -> np.random.Generator:
     return np.random.default_rng(seed + SPLIT_OFFSETS.get(split, 300_000))
 
 
-def _random_ordinal_utilities(rng: np.random.Generator, domain: Domain) -> np.ndarray:
-    utilities = np.zeros(
-        (domain.n_states, domain.n_agents, domain.n_alternatives),
-        dtype=np.float32,
-    )
-    for theta in range(domain.n_states):
-        for agent in range(domain.n_agents):
-            ranking = rng.permutation(domain.n_alternatives)
-            for rank, alternative in enumerate(ranking):
-                utilities[theta, agent, alternative] = domain.n_alternatives - 1 - rank
-    return utilities
-
-
-def _dictator_target(utilities: np.ndarray, domain: Domain, dictator: int) -> np.ndarray:
-    target = np.zeros((domain.n_states, domain.n_alternatives), dtype=bool)
-    for theta in range(domain.n_states):
-        target[theta, int(np.argmax(utilities[theta, dictator]))] = True
-    return target
-
-
-def _constant_target(domain: Domain, alternative: int) -> np.ndarray:
-    target = np.zeros((domain.n_states, domain.n_alternatives), dtype=bool)
-    target[:, alternative] = True
-    return target
-
-
-def _singleton_target_from_mapping(domain: Domain, mapping: np.ndarray) -> np.ndarray:
+def _target_from_mapping(domain: Domain, mapping: np.ndarray) -> np.ndarray:
     target = np.zeros((domain.n_states, domain.n_alternatives), dtype=bool)
     for theta, alternative in enumerate(mapping.astype(int).tolist()):
         target[theta, alternative] = True
     return target
 
 
-def _is_constant(target: np.ndarray) -> bool:
-    winners = np.argmax(target.astype(int), axis=1)
-    return bool(np.all(winners == winners[0]))
+def _random_target_mapping(rng: np.random.Generator, domain: Domain) -> np.ndarray:
+    # A latent nonlinear rule creates structured but varied state-to-outcome
+    # maps. Holdout uses different seeds, so memorizing examples does not work.
+    state_codes = rng.normal(size=(domain.n_states, 4))
+    alt_codes = rng.normal(size=(domain.n_alternatives, 4))
+    weights = rng.normal(size=(4,))
+    pairwise = state_codes @ np.diag(weights) @ alt_codes.T
+    pairwise += 0.35 * rng.normal(size=(domain.n_states, domain.n_alternatives))
+    mapping = np.argmax(pairwise, axis=1)
+
+    # Avoid degenerate all-constant maps unless the sample naturally needs one.
+    if np.all(mapping == mapping[0]):
+        mapping[int(rng.integers(domain.n_states))] = int(rng.integers(domain.n_alternatives))
+    return mapping.astype(np.int64)
 
 
-def _matches_any_agent_top(target: np.ndarray, utilities: np.ndarray) -> bool:
-    winners = np.argmax(target.astype(int), axis=1)
-    for agent in range(utilities.shape[1]):
-        tops = np.argmax(utilities[:, agent, :], axis=1)
-        if np.array_equal(winners, tops):
-            return True
-    return False
+def _utilities_with_implementable_targets(
+    rng: np.random.Generator,
+    domain: Domain,
+    mapping: np.ndarray,
+) -> np.ndarray:
+    selected = sorted(set(mapping.astype(int).tolist()))
+    utilities = np.zeros(
+        (domain.n_states, domain.n_agents, domain.n_alternatives),
+        dtype=np.float32,
+    )
+    for theta in range(domain.n_states):
+        target = int(mapping[theta])
+        for agent in range(domain.n_agents):
+            other_selected = [a for a in selected if a != target]
+            nonselected = [a for a in range(domain.n_alternatives) if a not in selected]
+            rng.shuffle(other_selected)
+            rng.shuffle(nonselected)
+
+            # Private distractors can outrank the target. The target only has
+            # to dominate alternatives that the canonical mechanism can reach.
+            split = int(rng.integers(0, len(nonselected) + 1)) if nonselected else 0
+            high_distractors = nonselected[:split]
+            low_distractors = nonselected[split:]
+            ranking = high_distractors + [target] + other_selected + low_distractors
+            for rank, alternative in enumerate(ranking):
+                utilities[theta, agent, alternative] = domain.n_alternatives - 1 - rank
+    return utilities
+
+
+def _negative_utilities_and_target(
+    rng: np.random.Generator,
+    domain: Domain,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    honest_mapping = _random_target_mapping(rng, domain)
+    utilities = _utilities_with_implementable_targets(rng, domain, honest_mapping)
+    target_mapping = np.roll(honest_mapping, 1)
+
+    if np.array_equal(target_mapping, honest_mapping):
+        target_mapping = honest_mapping.copy()
+        theta = int(rng.integers(domain.n_states))
+        choices = [a for a in range(domain.n_alternatives) if a != int(honest_mapping[theta])]
+        target_mapping[theta] = int(rng.choice(choices))
+    return utilities, _target_from_mapping(domain, target_mapping), target_mapping
+
+
+def canonical_outcome_table(domain: Domain, target_mapping: np.ndarray) -> np.ndarray:
+    """Teacher table for the fixed report/challenge scaffold.
+
+    If any player sends a challenge, the lowest-index challenger controls the
+    challenged state. Otherwise unanimous state reports are honored. Nonunanimous
+    report profiles fall back to player 0's reported state.
+    """
+
+    sizes = message_sizes(domain)
+    table = np.zeros(sizes, dtype=np.int64)
+    state_count = domain.n_states
+
+    for profile in product(*(range(size) for size in sizes)):
+        chosen_state = None
+        for agent_message in profile:
+            if agent_message >= state_count:
+                chosen_state = agent_message - state_count
+                break
+
+        if chosen_state is None:
+            if all(message == profile[0] for message in profile):
+                chosen_state = profile[0]
+            else:
+                chosen_state = profile[0]
+
+        table[profile] = int(target_mapping[int(chosen_state)])
+    return table
 
 
 def _make_positive_scr(
@@ -88,31 +154,24 @@ def _make_positive_scr(
     split: str,
     index: int,
 ) -> SocialChoiceRule:
-    utilities = _random_ordinal_utilities(rng, domain)
-
-    # Keep the initial benchmark learnable but not completely one-template.
-    if index % 5 == 0:
-        alternative = int(rng.integers(domain.n_alternatives))
-        target = _constant_target(domain, alternative)
-        label = domain.n_agents + alternative
-        kind = "constant"
-        metadata = {"constant_alternative": alternative}
-    else:
-        dictator = int(rng.integers(domain.n_agents))
-        target = _dictator_target(utilities, domain, dictator)
-        label = dictator
-        kind = "dictator"
-        metadata = {"dictator": dictator}
+    mapping = _random_target_mapping(rng, domain)
+    utilities = _utilities_with_implementable_targets(rng, domain, mapping)
+    target = _target_from_mapping(domain, mapping)
+    teacher = canonical_outcome_table(domain, mapping)
 
     return SocialChoiceRule(
-        scr_id=f"{split}_{index:04d}",
+        scr_id=f"{split}_{index:05d}",
         domain=domain,
         utilities=utilities,
         target_mask=target,
         split=split,
-        label=label,
-        kind=kind,
-        metadata=metadata,
+        label=-1,
+        kind="selected_top_challenge",
+        metadata={
+            "target_mapping": mapping.astype(int).tolist(),
+            "message_scaffold": "report_or_challenge_state",
+        },
+        teacher_outcome_table=teacher,
     )
 
 
@@ -122,28 +181,22 @@ def _make_negative_scr(
     split: str,
     index: int,
 ) -> SocialChoiceRule:
-    utilities = _random_ordinal_utilities(rng, domain)
-    for _ in range(10_000):
-        if index % 2 == 0:
-            agent = int(rng.integers(domain.n_agents))
-            mapping = np.argmin(utilities[:, agent, :], axis=1)
-        else:
-            mapping = rng.integers(domain.n_alternatives, size=domain.n_states)
-        target = _singleton_target_from_mapping(domain, mapping)
-        if not _is_constant(target) and not _matches_any_agent_top(target, utilities):
-            break
-    else:
-        raise RuntimeError("Could not generate a negative-control SCR.")
+    utilities, target, mapping = _negative_utilities_and_target(rng, domain)
 
     return SocialChoiceRule(
-        scr_id=f"{split}_{index:04d}",
+        scr_id=f"{split}_{index:05d}",
         domain=domain,
         utilities=utilities,
         target_mask=target,
         split=split,
         label=-1,
-        kind="negative_control",
-        metadata={"nonimplementable_control": True},
+        kind="negative_non_unanimous_target",
+        metadata={
+            "target_mapping": mapping.astype(int).tolist(),
+            "nonimplementable_control": True,
+            "message_scaffold": "report_or_challenge_state",
+        },
+        teacher_outcome_table=None,
     )
 
 

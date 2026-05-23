@@ -1,1 +1,1 @@
-{"timestamp":"2026-05-23T05:03:16.5154874+01:00","hypothesis":"Shrink dictator and constant mechanism message spaces while preserving the same implementable templates.","files_changed":["mechanism_decoder.py"],"train_score":0.0,"holdout_score":0.0,"negative_score":0.0,"final_score":6.78125,"holdout_bad_equilibrium_error":0.0,"holdout_missing_good_equilibrium_error":0.0,"negative_false_success_rate":0.0,"accepted":true,"reason":"FINAL_SCORE improved from 67.390625 to 6.781250; all holdout and negative-control constraints remain satisfied."}
+

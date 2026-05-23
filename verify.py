@@ -12,7 +12,7 @@ from envs import Domain, load_config
 from equilibrium import verify_generated_mechanism
 from mechanism_decoder import MechanismDecoder
 from scr_dataset import make_dataset
-from synthesizer import TemplateSynthesizer
+from synthesizer import TableSynthesizer
 
 
 def _checkpoint_file(path: str | Path) -> Path:
@@ -24,10 +24,10 @@ def _checkpoint_file(path: str | Path) -> Path:
     return checkpoint
 
 
-def _load_model(path: str | Path) -> tuple[TemplateSynthesizer, Domain]:
+def _load_model(path: str | Path) -> tuple[TableSynthesizer, Domain]:
     checkpoint = torch.load(_checkpoint_file(path), map_location="cpu")
     domain = Domain(**checkpoint["domain"])
-    model = TemplateSynthesizer(domain, hidden_dim=int(checkpoint.get("hidden_dim", 64)))
+    model = TableSynthesizer(domain, hidden_dim=int(checkpoint.get("hidden_dim", 256)))
     model.load_state_dict(checkpoint["model_state"])
     model.eval()
     return model, domain
@@ -51,7 +51,7 @@ def main() -> int:
             logits = model.forward_scrs([scr])[0]
             mechanism = decoder.decode_logits(scr, logits)
             result = verify_generated_mechanism(mechanism, scr)
-            result["prediction_logits"] = [float(x) for x in logits.cpu().tolist()]
+            result["prediction_table_shape"] = list(logits.shape)
             results.append(result)
 
     n = max(1, len(results))

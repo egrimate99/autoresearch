@@ -49,6 +49,7 @@ class SocialChoiceRule:
     label: int = -1
     kind: str = "unknown"
     metadata: dict[str, Any] = field(default_factory=dict)
+    teacher_outcome_table: np.ndarray | None = None
 
     @property
     def n_agents(self) -> int:
@@ -81,6 +82,7 @@ class SocialChoiceRule:
             "label": int(self.label),
             "kind": self.kind,
             "metadata": self.metadata,
+            "has_teacher_outcome_table": self.teacher_outcome_table is not None,
         }
 
 

@@ -1,6 +1,6 @@
-# mechanism-synthesis autoresearch
+# learned mechanism-synthesis autoresearch
 
-This repo is set up for autoresearch over a synthesizer:
+This repo is set up for autoresearch over a learned synthesizer:
 
 ```text
 A_omega(F) -> G_F
@@ -8,7 +8,17 @@ A_omega(F) -> G_F
 
 `F` is a finite social choice rule/correspondence. `G_F` is a generated finite-message mechanism. The fixed verifier checks exact pure-Nash implementation by enumerating all message profiles for every state.
 
-## Run once
+The current setup is intentionally a hard learning benchmark:
+
+- `scr_dataset.py` generates larger, arbitrary state-to-outcome SCRs.
+- Positive SCRs are implementable by a report/challenge mechanism, but chosen outcomes are often not top alternatives overall.
+- Private distractor alternatives make the utility tensor matter; copying top choices is not enough.
+- `synthesizer.py` emits logits for a full mechanism outcome table.
+- `mechanism_decoder.py` only reshapes learned logits and takes argmax.
+- Heldout SCRs are fresh samples.
+- Negative controls perturb targets away from the positive implementable structure.
+
+## Run Once
 
 From PowerShell:
 
@@ -29,7 +39,7 @@ python -m uv run python aggregate.py results/verify_train.json results/verify_ho
 
 The last command prints `FINAL_SCORE=...`. Lower is better.
 
-## Autoresearch files
+## Autoresearch Files
 
 Editable by the research agent:
 

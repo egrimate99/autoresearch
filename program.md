@@ -1,8 +1,8 @@
 # Objective
 
-We are improving a mechanism-synthesis model, not a single mechanism.
+We are improving a learned mechanism synthesizer, not a single mechanism and not a hand-coded searcher.
 
-The learned object is a synthesizer:
+The learned object is:
 
 ```text
 A_omega(F) -> G_F
@@ -13,24 +13,22 @@ Input:
 - finite agents
 - finite states
 - finite alternatives
-- finite preferences/utilities
+- finite ordinal utilities
 
 Output:
 - a finite-message mechanism/game form G_F
 
-For every implementable SCR F, the generated mechanism G_F should pure-Nash-implement F:
+The current benchmark is deliberately harder than the initial template toy setup:
 
-```text
-NE(G_F, theta) outcomes = F(theta)
-```
+- positive SCRs contain arbitrary state-to-outcome maps on a larger domain
+- chosen outcomes need not be each agent's top alternative overall
+- private distractor alternatives often outrank the chosen target
+- implementation requires a report/challenge style off-equilibrium structure
+- the model emits a full finite outcome table, not a template id
+- heldout SCRs are freshly generated and cannot be memorized
+- negative controls perturb targets away from unanimous-top implementability
 
-for every state theta.
-
-This requires:
-1. at least one good pure Nash equilibrium for each theta
-2. no bad pure Nash equilibria for any theta
-
-A generated mechanism with one good equilibrium and one bad equilibrium is a failure.
+Success means the checkpointed neural synthesizer learns to generate mechanisms whose exact pure Nash equilibria implement the input SCRs.
 
 # Editable files
 
@@ -49,25 +47,40 @@ You may not edit:
 - configs/*.yaml
 - scripts/eval_once.sh
 
-If a fixed file seems wrong, log the issue but do not modify it.
+If a fixed file seems wrong, log the issue but do not modify it during an autoresearch run.
+
+# What Counts As Learning
+
+Allowed:
+- neural architectures that map SCR tensors to mechanism outcome tables
+- differentiable losses over generated tables
+- curriculum inside train.py using the fixed dataset API
+- regularization and decoding improvements that do not inspect verifier output per instance
+- learned residuals over the fixed report/challenge scaffold
+
+Disallowed:
+- hard-coded direct reconstruction of the canonical teacher table
+- if/else decoding from target_mapping metadata
+- per-SCR brute force mechanism search
+- changing the verifier, generator, configs, or aggregate score during a run
+- using negative-control labels at inference time
 
 # Evaluation loop
 
 For each evaluation set:
 
 1. Load many SCR instances F.
-2. Run the synthesizer A_omega(F).
-3. Decode its output into a candidate finite-message mechanism G_F.
+2. Run the checkpointed synthesizer A_omega(F).
+3. Decode learned logits into a candidate finite-message mechanism G_F.
 4. For every state theta of F:
    - enumerate all message profiles
    - compute pure Nash equilibria
    - compare equilibrium outcomes to F(theta)
-5. Score the generated mechanism.
-6. Aggregate scores over SCR instances.
+5. Aggregate exact implementation errors over SCR instances.
 
-Success means better synthesis accuracy over many SCRs, especially held-out SCRs.
+Success is aggregate heldout synthesis performance, not one SCR.
 
-# Commands
+# Command
 
 After every attempted change, run:
 
@@ -75,16 +88,16 @@ After every attempted change, run:
 ./scripts/eval_once.sh
 ```
 
-This script trains the synthesizer, evaluates it on train SCRs, held-out SCRs, and negative-control SCRs, then prints a scalar FINAL_SCORE.
+This trains the synthesizer, evaluates train SCRs, heldout SCRs, and negative-control SCRs, then prints a scalar FINAL_SCORE.
 
 # Acceptance rule
 
 Accept a change only if:
 
 1. FINAL_SCORE decreases
-2. holdout_bad_equilibrium_error decreases or stays zero
-3. holdout_missing_good_equilibrium_error decreases or stays zero
-4. negative-control SCRs are not falsely verified as implementable
+2. holdout_bad_equilibrium_error decreases, or stays zero if already zero
+3. holdout_missing_good_equilibrium_error decreases, or stays zero if already zero
+4. negative_false_success_rate stays zero
 5. no fixed files were modified
 
 Reject and revert otherwise.
@@ -95,32 +108,9 @@ Optimize in this order:
 
 1. eliminate bad equilibria in generated mechanisms
 2. ensure good equilibria exist
-3. improve held-out SCR generalization
+3. improve heldout SCR generalization
 4. reduce exploitability of intended equilibria
-5. reduce mechanism size/complexity
-
-# Allowed ideas
-
-Try:
-- better SCR encodings
-- better mechanism decoders
-- tabular game-form output
-- Maskin-style message scaffolds
-- learned off-equilibrium punishments
-- hard-coded canonical scaffold plus learned residual
-- equivariant architectures over agents/states/alternatives
-- curriculum over SCR size
-- stronger training loss for bad-equilibrium exclusion
-- adversarial search over near-equilibria during training
-
-Do not start with:
-- continuous messages
-- mixed Nash equilibrium
-- large unrestricted domains
-- transformer-only black box with no structure
-- changing the verifier
-- changing the SCR generator
-- changing negative controls
+5. reduce table size or complexity only after correctness improves
 
 # Logging
 
@@ -134,6 +124,7 @@ Append one JSON object to results/runs.jsonl after every experiment:
   "train_score": 0.0,
   "holdout_score": 0.0,
   "negative_score": 0.0,
+  "final_score": 0.0,
   "holdout_bad_equilibrium_error": 0.0,
   "holdout_missing_good_equilibrium_error": 0.0,
   "negative_false_success_rate": 0.0,

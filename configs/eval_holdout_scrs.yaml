@@ -1,12 +1,12 @@
 dataset:
   split: holdout
-  num_scrs: 128
+  num_scrs: 64
   only_implementable: true
 
 domain:
   n_agents: 3
-  n_states: 4
-  n_alternatives: 4
+  n_states: 6
+  n_alternatives: 8
   preference_type: ordinal
 
 evaluation:

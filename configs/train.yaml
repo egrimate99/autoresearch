@@ -5,19 +5,18 @@ dataset:
 
 domain:
   n_agents: 3
-  n_states: 4
-  n_alternatives: 4
+  n_states: 6
+  n_alternatives: 8
   preference_type: ordinal
 
 mechanism:
-  message_scaffold: maskin
-  challenge_size: 4
+  message_scaffold: report_or_challenge_state
   deterministic_outcomes: true
 
 training:
   seed: 0
-  epochs: 200
-  batch_size: 16
-  lr: 0.001
-  hidden_dim: 64
+  epochs: 40
+  batch_size: 32
+  lr: 0.0003
+  hidden_dim: 128
   device: cpu

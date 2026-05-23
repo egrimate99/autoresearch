@@ -1,13 +1,17 @@
 dataset:
   split: train
-  num_scrs: 64
+  num_scrs: 96
   only_implementable: true
 
 domain:
   n_agents: 3
-  n_states: 6
-  n_alternatives: 8
+  n_states: 8
+  n_alternatives: 7
   preference_type: ordinal
+
+mechanism:
+  message_scaffold: variable_latent_game_form
+  max_messages_per_agent: 3
 
 evaluation:
   pure_nash_only: true

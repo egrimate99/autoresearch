@@ -1,6 +1,6 @@
 # Objective
 
-We are improving a learned mechanism synthesizer, not a single mechanism and not a hand-coded searcher.
+We are improving a learned synthesizer for minimal finite Nash implementation.
 
 The learned object is:
 
@@ -18,19 +18,35 @@ Input:
 Output:
 - a finite-message mechanism/game form G_F
 
-The current benchmark is deliberately harder than the initial template toy setup:
+The verifier checks exact pure Nash implementation:
 
-- positive SCRs contain arbitrary state-to-outcome maps on a larger domain
-- chosen outcomes need not be each agent's top alternative overall
-- private distractor alternatives often outrank the chosen target
-- implementation requires a report/challenge style off-equilibrium structure
-- the model emits a full finite outcome table, not a template id
-- heldout SCRs are freshly generated and cannot be memorized
-- negative controls perturb targets away from unanimous-top implementability
+```text
+NE(G_F, theta) outcomes = F(theta)
+```
 
-Success means the checkpointed neural synthesizer learns to generate mechanisms whose exact pure Nash equilibria implement the input SCRs.
+for every state theta.
 
-# Editable files
+The benchmark now has two goals:
+
+1. correctness: implement the SCR exactly
+2. minimality: use as little message space / outcome-table complexity as possible
+
+# Benchmark Structure
+
+Positive SCRs are generated from varied small latent mechanisms, not from a
+state-report construction. For each latent mechanism H and each state theta,
+the generator samples utilities and sets F(theta) equal to the outcomes of H's
+pure Nash equilibria at theta. Therefore H implements F by construction.
+
+The model sees only F. It does not see the latent mechanism at evaluation time.
+
+The evaluator accepts any generated mechanism that implements F. It then scores
+message-space complexity against the latent mechanism's quotient complexity as
+an oracle reference. This makes the task about finding compact implementations,
+not reproducing a known Maskin/Moore-Repullo style construction with states in
+the message.
+
+# Editable Files
 
 You may edit:
 - train.py
@@ -52,35 +68,21 @@ If a fixed file seems wrong, log the issue but do not modify it during an autore
 # What Counts As Learning
 
 Allowed:
-- neural architectures that map SCR tensors to mechanism outcome tables
+- neural architectures that map SCR tensors to finite mechanisms
+- predicting variable message counts
 - differentiable losses over generated tables
+- verifier-reward fine-tuning or policy-gradient/RL inside train.py
 - curriculum inside train.py using the fixed dataset API
-- regularization and decoding improvements that do not inspect verifier output per instance
-- learned residuals over the fixed report/challenge scaffold
+- decoding improvements that do not inspect verifier output per instance
 
 Disallowed:
-- hard-coded direct reconstruction of the canonical teacher table
-- if/else decoding from target_mapping metadata
-- per-SCR brute force mechanism search
+- hard-coded direct reconstruction of the fixed generator
+- reading latent mechanism metadata at inference time
+- per-SCR brute force search over mechanisms
 - changing the verifier, generator, configs, or aggregate score during a run
 - using negative-control labels at inference time
 
-# Evaluation loop
-
-For each evaluation set:
-
-1. Load many SCR instances F.
-2. Run the checkpointed synthesizer A_omega(F).
-3. Decode learned logits into a candidate finite-message mechanism G_F.
-4. For every state theta of F:
-   - enumerate all message profiles
-   - compute pure Nash equilibria
-   - compare equilibrium outcomes to F(theta)
-5. Aggregate exact implementation errors over SCR instances.
-
-Success is aggregate heldout synthesis performance, not one SCR.
-
-# Command
+# Evaluation Loop
 
 After every attempted change, run:
 
@@ -88,9 +90,10 @@ After every attempted change, run:
 ./scripts/eval_once.sh
 ```
 
-This trains the synthesizer, evaluates train SCRs, heldout SCRs, and negative-control SCRs, then prints a scalar FINAL_SCORE.
+This trains the synthesizer, evaluates train SCRs, heldout SCRs, and negative
+controls, then prints a scalar FINAL_SCORE.
 
-# Acceptance rule
+# Acceptance Rule
 
 Accept a change only if:
 
@@ -102,15 +105,15 @@ Accept a change only if:
 
 Reject and revert otherwise.
 
-# Optimization priority
+# Optimization Priority
 
 Optimize in this order:
 
 1. eliminate bad equilibria in generated mechanisms
 2. ensure good equilibria exist
-3. improve heldout SCR generalization
-4. reduce exploitability of intended equilibria
-5. reduce table size or complexity only after correctness improves
+3. keep negative false success at zero
+4. improve heldout generalization
+5. minimize message-space complexity relative to the oracle reference
 
 # Logging
 
@@ -124,13 +127,16 @@ Append one JSON object to results/runs.jsonl after every experiment:
   "train_score": 0.0,
   "holdout_score": 0.0,
   "negative_score": 0.0,
+  "minimality_score": 0.0,
   "final_score": 0.0,
   "holdout_bad_equilibrium_error": 0.0,
   "holdout_missing_good_equilibrium_error": 0.0,
   "negative_false_success_rate": 0.0,
+  "avg_complexity_ratio": 0.0,
   "accepted": true,
   "reason": "..."
 }
 ```
 
-Never claim success from one SCR. Success is aggregate synthesis performance over many SCRs.
+Never claim success from one SCR. Success is aggregate heldout correctness plus
+compactness over many SCRs.

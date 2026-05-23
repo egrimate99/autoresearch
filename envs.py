@@ -50,6 +50,7 @@ class SocialChoiceRule:
     kind: str = "unknown"
     metadata: dict[str, Any] = field(default_factory=dict)
     teacher_outcome_table: np.ndarray | None = None
+    teacher_message_sizes: tuple[int, ...] | None = None
 
     @property
     def n_agents(self) -> int:

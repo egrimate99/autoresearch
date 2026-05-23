@@ -1,6 +1,8 @@
-"""Editable decoder from learned table logits to finite mechanisms."""
+"""Editable decoder from learned logits to finite mechanisms."""
 
 from __future__ import annotations
+
+import itertools
 
 import numpy as np
 import torch
@@ -9,44 +11,38 @@ from envs import Domain, Mechanism, SocialChoiceRule
 
 
 class MechanismDecoder:
-    """Decode learned logits into a compact state-report mechanism.
+    """Decode variable-size mechanisms from learned logits.
 
-    The synthesizer is trained on the full report/challenge scaffold. At decode
-    time, we keep only the learned outcomes at unanimous report profiles and
-    expose a smaller mechanism where agent 0 reports a state and the other
-    agents have one dummy message.
+    The decoder picks each agent's message count from the learned size logits
+    and slices the learned padded outcome table. It does not inspect the
+    verifier or solve a per-SCR search problem.
     """
 
-    def __init__(self, domain: Domain):
+    def __init__(self, domain: Domain, max_messages: int = 3):
         self.domain = domain
+        self.max_messages = max_messages
 
-    @property
-    def message_sizes(self) -> tuple[int, ...]:
-        return tuple([self.domain.n_states] + [1] * (self.domain.n_agents - 1))
+    def decode_logits(self, scr: SocialChoiceRule, outputs: dict[str, torch.Tensor]) -> Mechanism:
+        table_logits = outputs["table_logits"]
+        size_logits = outputs["size_logits"]
+        if table_logits.ndim == 3:
+            table_logits = table_logits[0]
+        if size_logits.ndim == 3:
+            size_logits = size_logits[0]
 
-    def decode_logits(self, scr: SocialChoiceRule, logits: torch.Tensor) -> Mechanism:
-        if logits.ndim == 1:
-            logits = logits.view(-1, scr.n_alternatives)
-        full_shape = tuple([2 * scr.n_states] * scr.n_agents) + (scr.n_alternatives,)
-        full_logits = logits.detach().cpu().view(full_shape)
+        size_labels = torch.argmax(size_logits, dim=-1).detach().cpu().numpy().astype(int)
+        message_sizes = tuple((size_labels + 1).tolist())
 
-        state_outcomes = []
-        for state in range(scr.n_states):
-            full_profile = tuple([state] * scr.n_agents)
-            state_outcomes.append(int(torch.argmax(full_logits[full_profile]).item()))
-
-        unique_outcomes = sorted(set(state_outcomes))
-        outcome_to_message = {outcome: i for i, outcome in enumerate(unique_outcomes)}
-        message_sizes = tuple([len(unique_outcomes)] + [1] * (scr.n_agents - 1))
+        predicted = torch.argmax(table_logits, dim=-1).detach().cpu().numpy().astype(np.int64)
+        full_table = predicted.reshape(tuple([self.max_messages] * scr.n_agents))
         outcome_table = np.zeros(message_sizes, dtype=np.int64)
-        for outcome, message in outcome_to_message.items():
-            profile = tuple([message] + [0] * (scr.n_agents - 1))
-            outcome_table[profile] = outcome
+        for profile in itertools.product(*(range(size) for size in message_sizes)):
+            outcome_table[profile] = full_table[profile]
 
         return Mechanism(
             domain=scr.domain,
             message_sizes=message_sizes,
             outcome_table=outcome_table,
-            template_name="learned_outcome_class_report",
-            metadata={"message_scaffold": "outcome_class_report_from_learned_logits"},
+            template_name="learned_variable_table",
+            metadata={"max_messages": self.max_messages},
         )

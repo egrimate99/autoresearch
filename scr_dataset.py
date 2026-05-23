@@ -1,18 +1,14 @@
-"""Fixed hard SCR generator for learned mechanism synthesis.
+"""Fixed generator for minimal finite-mechanism synthesis.
 
-Positive SCRs are sampled from a broad family of singleton social choice
-functions. At every state, the chosen alternative is made the strict unanimous
-top alternative, so a finite report/challenge mechanism can implement it.
+Positive SCRs are generated from varied small latent mechanisms, not from a
+state-report construction. For each sampled latent mechanism H and each state
+theta, we sample ordinal utilities and define F(theta) to be exactly the set of
+outcomes attained by pure Nash equilibria of H at theta. H therefore implements
+F by construction.
 
-The training label is not a template id. It is the full canonical mechanism
-outcome table on a fixed finite message scaffold:
-
-- message 0..S-1: report a state
-- message S..2S-1: challenge a state
-
-The learner must map SCR tensors to this outcome table. Verification never
-uses the teacher table; it only enumerates pure Nash equilibria of the
-checkpointed synthesizer's generated mechanism.
+The benchmark target is not "recover H exactly". The verifier accepts any
+generated mechanism that implements F. The aggregate score then rewards smaller
+mechanisms by comparing generated complexity to H's quotient complexity.
 """
 
 from __future__ import annotations
@@ -22,7 +18,8 @@ from typing import Any
 
 import numpy as np
 
-from envs import Domain, SocialChoiceRule
+from envs import Domain, Mechanism, SocialChoiceRule
+from equilibrium import verify_generated_mechanism
 
 
 SPLIT_OFFSETS = {
@@ -32,12 +29,13 @@ SPLIT_OFFSETS = {
 }
 
 
-def message_size(domain: Domain) -> int:
-    return 2 * domain.n_states
+def max_message_size(config: dict[str, Any]) -> int:
+    mechanism = config.get("mechanism", {})
+    return int(mechanism.get("max_messages_per_agent", 3))
 
 
-def message_sizes(domain: Domain) -> tuple[int, ...]:
-    return tuple([message_size(domain)] * domain.n_agents)
+def max_message_profiles(domain: Domain, max_messages: int) -> int:
+    return max_messages ** domain.n_agents
 
 
 def _config_seed(config: dict[str, Any]) -> int:
@@ -51,101 +49,115 @@ def _rng_for_split(seed: int, split: str) -> np.random.Generator:
     return np.random.default_rng(seed + SPLIT_OFFSETS.get(split, 300_000))
 
 
-def _target_from_mapping(domain: Domain, mapping: np.ndarray) -> np.ndarray:
-    target = np.zeros((domain.n_states, domain.n_alternatives), dtype=bool)
-    for theta, alternative in enumerate(mapping.astype(int).tolist()):
-        target[theta, alternative] = True
-    return target
-
-
-def _random_target_mapping(rng: np.random.Generator, domain: Domain) -> np.ndarray:
-    # A latent nonlinear rule creates structured but varied state-to-outcome
-    # maps. Holdout uses different seeds, so memorizing examples does not work.
-    state_codes = rng.normal(size=(domain.n_states, 4))
-    alt_codes = rng.normal(size=(domain.n_alternatives, 4))
-    weights = rng.normal(size=(4,))
-    pairwise = state_codes @ np.diag(weights) @ alt_codes.T
-    pairwise += 0.35 * rng.normal(size=(domain.n_states, domain.n_alternatives))
-    mapping = np.argmax(pairwise, axis=1)
-
-    # Avoid degenerate all-constant maps unless the sample naturally needs one.
-    if np.all(mapping == mapping[0]):
-        mapping[int(rng.integers(domain.n_states))] = int(rng.integers(domain.n_alternatives))
-    return mapping.astype(np.int64)
-
-
-def _utilities_with_implementable_targets(
-    rng: np.random.Generator,
-    domain: Domain,
-    mapping: np.ndarray,
-) -> np.ndarray:
-    selected = sorted(set(mapping.astype(int).tolist()))
+def _random_ordinal_utilities(rng: np.random.Generator, domain: Domain) -> np.ndarray:
     utilities = np.zeros(
         (domain.n_states, domain.n_agents, domain.n_alternatives),
         dtype=np.float32,
     )
     for theta in range(domain.n_states):
-        target = int(mapping[theta])
         for agent in range(domain.n_agents):
-            other_selected = [a for a in selected if a != target]
-            nonselected = [a for a in range(domain.n_alternatives) if a not in selected]
-            rng.shuffle(other_selected)
-            rng.shuffle(nonselected)
-
-            # Private distractors can outrank the target. The target only has
-            # to dominate alternatives that the canonical mechanism can reach.
-            split = int(rng.integers(0, len(nonselected) + 1)) if nonselected else 0
-            high_distractors = nonselected[:split]
-            low_distractors = nonselected[split:]
-            ranking = high_distractors + [target] + other_selected + low_distractors
+            ranking = rng.permutation(domain.n_alternatives)
             for rank, alternative in enumerate(ranking):
                 utilities[theta, agent, alternative] = domain.n_alternatives - 1 - rank
     return utilities
 
 
-def _negative_utilities_and_target(
+def _mechanism_complexity(message_sizes: tuple[int, ...], table: np.ndarray) -> float:
+    profiles = int(np.prod(np.array(message_sizes, dtype=np.int64)))
+    outcomes = len(set(table.reshape(-1).astype(int).tolist()))
+    return float(profiles + outcomes)
+
+
+def _sample_latent_mechanism(
     rng: np.random.Generator,
     domain: Domain,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    honest_mapping = _random_target_mapping(rng, domain)
-    utilities = _utilities_with_implementable_targets(rng, domain, honest_mapping)
-    target_mapping = np.roll(honest_mapping, 1)
+    max_messages: int,
+) -> Mechanism:
+    message_sizes = tuple(
+        int(rng.integers(2, max_messages + 1))
+        for _ in range(domain.n_agents)
+    )
+    table = rng.integers(domain.n_alternatives, size=message_sizes, dtype=np.int64)
 
-    if np.array_equal(target_mapping, honest_mapping):
-        target_mapping = honest_mapping.copy()
-        theta = int(rng.integers(domain.n_states))
-        choices = [a for a in range(domain.n_alternatives) if a != int(honest_mapping[theta])]
-        target_mapping[theta] = int(rng.choice(choices))
-    return utilities, _target_from_mapping(domain, target_mapping), target_mapping
+    # Make degenerate constant mechanisms rare; they make the minimality task
+    # uninteresting.
+    if len(set(table.reshape(-1).astype(int).tolist())) < 2:
+        table[(0,) * domain.n_agents] = int((table[(0,) * domain.n_agents] + 1) % domain.n_alternatives)
+
+    return Mechanism(
+        domain=domain,
+        message_sizes=message_sizes,
+        outcome_table=table,
+        template_name="latent_random_game_form",
+    )
 
 
-def canonical_outcome_table(domain: Domain, target_mapping: np.ndarray) -> np.ndarray:
-    """Teacher table for the fixed report/challenge scaffold.
+def _target_from_ne_outcomes(domain: Domain, mechanism: Mechanism, utilities: np.ndarray) -> np.ndarray | None:
+    target = np.zeros((domain.n_states, domain.n_alternatives), dtype=bool)
+    probe_scr = SocialChoiceRule(
+        scr_id="probe",
+        domain=domain,
+        utilities=utilities,
+        target_mask=np.ones((domain.n_states, domain.n_alternatives), dtype=bool),
+        split="probe",
+    )
 
-    If any player sends a challenge, the lowest-index challenger controls the
-    challenged state. Otherwise unanimous state reports are honored. Nonunanimous
-    report profiles fall back to player 0's reported state.
-    """
+    for theta in range(domain.n_states):
+        outcomes = set()
+        for profile in mechanism.all_message_profiles():
+            if _is_pure_nash(mechanism, probe_scr, theta, profile):
+                outcomes.add(mechanism.outcome(theta, profile))
+        if not outcomes:
+            return None
+        for outcome in outcomes:
+            target[theta, outcome] = True
+    return target
 
-    sizes = message_sizes(domain)
-    table = np.zeros(sizes, dtype=np.int64)
-    state_count = domain.n_states
 
-    for profile in product(*(range(size) for size in sizes)):
-        chosen_state = None
-        for agent_message in profile:
-            if agent_message >= state_count:
-                chosen_state = agent_message - state_count
-                break
+def _is_pure_nash(
+    mechanism: Mechanism,
+    scr: SocialChoiceRule,
+    theta: int,
+    profile: tuple[int, ...],
+) -> bool:
+    for agent in range(scr.n_agents):
+        current = mechanism.outcome(theta, profile)
+        current_utility = scr.utility(theta, agent, current)
+        for message in range(mechanism.message_sizes[agent]):
+            if message == profile[agent]:
+                continue
+            deviated = list(profile)
+            deviated[agent] = message
+            deviated_outcome = mechanism.outcome(theta, tuple(deviated))
+            if scr.utility(theta, agent, deviated_outcome) > current_utility + 1e-9:
+                return False
+    return True
 
-        if chosen_state is None:
-            if all(message == profile[0] for message in profile):
-                chosen_state = profile[0]
-            else:
-                chosen_state = profile[0]
 
-        table[profile] = int(target_mapping[int(chosen_state)])
-    return table
+def _positive_candidate(
+    rng: np.random.Generator,
+    domain: Domain,
+    max_messages: int,
+) -> tuple[Mechanism, np.ndarray, np.ndarray] | None:
+    mechanism = _sample_latent_mechanism(rng, domain, max_messages)
+    utilities = _random_ordinal_utilities(rng, domain)
+    target = _target_from_ne_outcomes(domain, mechanism, utilities)
+    if target is None:
+        return None
+
+    target_sizes = target.sum(axis=1)
+    if np.any(target_sizes == 0):
+        return None
+    if np.mean(target_sizes) > max(1.0, domain.n_alternatives / 2):
+        return None
+    return mechanism, utilities, target
+
+
+def _pad_teacher_table(table: np.ndarray, message_sizes: tuple[int, ...], max_messages: int) -> np.ndarray:
+    padded = np.zeros(tuple([max_messages] * len(message_sizes)), dtype=np.int64)
+    slices = tuple(slice(0, size) for size in message_sizes)
+    padded[slices] = table
+    return padded
 
 
 def _make_positive_scr(
@@ -153,26 +165,42 @@ def _make_positive_scr(
     domain: Domain,
     split: str,
     index: int,
+    max_messages: int,
 ) -> SocialChoiceRule:
-    mapping = _random_target_mapping(rng, domain)
-    utilities = _utilities_with_implementable_targets(rng, domain, mapping)
-    target = _target_from_mapping(domain, mapping)
-    teacher = canonical_outcome_table(domain, mapping)
+    for _ in range(10_000):
+        candidate = _positive_candidate(rng, domain, max_messages)
+        if candidate is None:
+            continue
+        mechanism, utilities, target = candidate
+        oracle_complexity = _mechanism_complexity(mechanism.message_sizes, mechanism.outcome_table)
 
-    return SocialChoiceRule(
-        scr_id=f"{split}_{index:05d}",
-        domain=domain,
-        utilities=utilities,
-        target_mask=target,
-        split=split,
-        label=-1,
-        kind="selected_top_challenge",
-        metadata={
-            "target_mapping": mapping.astype(int).tolist(),
-            "message_scaffold": "report_or_challenge_state",
-        },
-        teacher_outcome_table=teacher,
-    )
+        scr = SocialChoiceRule(
+            scr_id=f"{split}_{index:05d}",
+            domain=domain,
+            utilities=utilities,
+            target_mask=target,
+            split=split,
+            label=-1,
+            kind="latent_mechanism_ne_outcomes",
+            metadata={
+                "teacher_message_sizes": list(mechanism.message_sizes),
+                "oracle_complexity": oracle_complexity,
+                "message_scaffold": "variable_latent_game_form",
+            },
+            teacher_outcome_table=_pad_teacher_table(
+                mechanism.outcome_table,
+                mechanism.message_sizes,
+                max_messages,
+            ),
+            teacher_message_sizes=mechanism.message_sizes,
+        )
+
+        # Guard the generator invariant using the same fixed verifier used at
+        # evaluation time.
+        if verify_generated_mechanism(mechanism, scr)["verified"]:
+            return scr
+
+    raise RuntimeError("Could not generate a positive implementable SCR.")
 
 
 def _make_negative_scr(
@@ -180,23 +208,32 @@ def _make_negative_scr(
     domain: Domain,
     split: str,
     index: int,
+    max_messages: int,
 ) -> SocialChoiceRule:
-    utilities, target, mapping = _negative_utilities_and_target(rng, domain)
+    positive = _make_positive_scr(rng, domain, split, index, max_messages)
+    target = positive.target_mask.copy()
+    for theta in range(domain.n_states):
+        if rng.random() < 0.75:
+            choices = [a for a in range(domain.n_alternatives) if not target[theta, a]]
+            if choices:
+                target[theta, :] = False
+                target[theta, int(rng.choice(choices))] = True
 
     return SocialChoiceRule(
         scr_id=f"{split}_{index:05d}",
         domain=domain,
-        utilities=utilities,
+        utilities=positive.utilities,
         target_mask=target,
         split=split,
         label=-1,
-        kind="negative_non_unanimous_target",
+        kind="negative_perturbed_ne_outcomes",
         metadata={
-            "target_mapping": mapping.astype(int).tolist(),
             "nonimplementable_control": True,
-            "message_scaffold": "report_or_challenge_state",
+            "source_teacher_message_sizes": positive.metadata["teacher_message_sizes"],
+            "oracle_complexity": positive.metadata["oracle_complexity"],
         },
         teacher_outcome_table=None,
+        teacher_message_sizes=None,
     )
 
 
@@ -206,8 +243,9 @@ def make_dataset(config: dict[str, Any]) -> list[SocialChoiceRule]:
     num_scrs = int(dataset_cfg.get("num_scrs", 128))
     only_nonimplementable = bool(dataset_cfg.get("only_nonimplementable", False))
     domain = Domain.from_config(config)
+    max_messages = max_message_size(config)
     rng = _rng_for_split(_config_seed(config), split)
 
     if only_nonimplementable or split == "negative":
-        return [_make_negative_scr(rng, domain, split, i) for i in range(num_scrs)]
-    return [_make_positive_scr(rng, domain, split, i) for i in range(num_scrs)]
+        return [_make_negative_scr(rng, domain, split, i, max_messages) for i in range(num_scrs)]
+    return [_make_positive_scr(rng, domain, split, i, max_messages) for i in range(num_scrs)]

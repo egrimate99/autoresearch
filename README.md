@@ -1,22 +1,21 @@
-# learned mechanism-synthesis autoresearch
+# minimal mechanism-synthesis autoresearch
 
-This repo is set up for autoresearch over a learned synthesizer:
+This repo benchmarks a learned synthesizer:
 
 ```text
 A_omega(F) -> G_F
 ```
 
-`F` is a finite social choice rule/correspondence. `G_F` is a generated finite-message mechanism. The fixed verifier checks exact pure-Nash implementation by enumerating all message profiles for every state.
+`F` is a finite social choice rule/correspondence. `G_F` is a generated finite-message mechanism. The fixed verifier checks exact pure-Nash implementation by enumerating every message profile at every state.
 
-The current setup is intentionally a hard learning benchmark:
+The current benchmark is about compact implementation, not rediscovering a state-report construction:
 
-- `scr_dataset.py` generates larger, arbitrary state-to-outcome SCRs.
-- Positive SCRs are implementable by a report/challenge mechanism, but chosen outcomes are often not top alternatives overall.
-- Private distractor alternatives make the utility tensor matter; copying top choices is not enough.
-- `synthesizer.py` emits logits for a full mechanism outcome table.
-- `mechanism_decoder.py` only reshapes learned logits and takes argmax.
-- Heldout SCRs are fresh samples.
-- Negative controls perturb targets away from the positive implementable structure.
+- positive SCRs are generated from varied small latent mechanisms
+- the latent mechanism implements the SCR by construction
+- the model sees only the SCR at evaluation time
+- generated mechanisms may use variable message counts
+- the score penalizes both implementation errors and complexity relative to an oracle reference
+- negative controls perturb SCR targets and must not be falsely verified
 
 ## Run Once
 

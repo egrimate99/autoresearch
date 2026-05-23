@@ -1,0 +1,14 @@
+dataset:
+  split: negative
+  num_scrs: 128
+  only_nonimplementable: true
+
+domain:
+  n_agents: 3
+  n_states: 4
+  n_alternatives: 4
+  preference_type: ordinal
+
+evaluation:
+  pure_nash_only: true
+  exact_enumeration: true

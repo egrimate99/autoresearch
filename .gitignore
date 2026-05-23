@@ -9,8 +9,15 @@ wheels/
 # Virtual environments
 .venv
 worktrees/
-results/
 queue/
+
+# Generated evaluation artifacts
+results/latest/*
+!results/latest/.gitkeep
+results/verify_*.json
+results/baseline.txt
+results/final_*
+*.pt
 
 # Agent prompt files (generated per-session by launchers)
 CLAUDE.md

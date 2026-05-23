@@ -1,0 +1,14 @@
+dataset:
+  split: train
+  num_scrs: 128
+  only_implementable: true
+
+domain:
+  n_agents: 3
+  n_states: 4
+  n_alternatives: 4
+  preference_type: ordinal
+
+evaluation:
+  pure_nash_only: true
+  exact_enumeration: true

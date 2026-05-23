@@ -33,7 +33,14 @@ class MechanismDecoder:
         size_labels = torch.argmax(size_logits, dim=-1).detach().cpu().numpy().astype(int)
         message_sizes = tuple((size_labels + 1).tolist())
 
-        predicted = torch.argmax(table_logits, dim=-1).detach().cpu().numpy().astype(np.int64)
+        allowed = torch.as_tensor(
+            scr.target_mask.any(axis=0),
+            dtype=torch.bool,
+            device=table_logits.device,
+        )
+        masked_logits = table_logits.clone()
+        masked_logits[:, ~allowed] = -1.0e9
+        predicted = torch.argmax(masked_logits, dim=-1).detach().cpu().numpy().astype(np.int64)
         full_table = predicted.reshape(tuple([self.max_messages] * scr.n_agents))
         outcome_table = np.zeros(message_sizes, dtype=np.int64)
         for profile in itertools.product(*(range(size) for size in message_sizes)):

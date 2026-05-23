@@ -8,7 +8,7 @@ F by construction.
 
 The benchmark target is not "recover H exactly". The verifier accepts any
 generated mechanism that implements F. The aggregate score then rewards smaller
-mechanisms by comparing generated complexity to H's quotient complexity.
+mechanisms by comparing generated complexity to H's latent reference complexity.
 """
 
 from __future__ import annotations

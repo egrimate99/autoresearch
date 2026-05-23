@@ -41,10 +41,11 @@ pure Nash equilibria at theta. Therefore H implements F by construction.
 The model sees only F. It does not see the latent mechanism at evaluation time.
 
 The evaluator accepts any generated mechanism that implements F. It then scores
-message-space complexity against the latent mechanism's quotient complexity as
-an oracle reference. This makes the task about finding compact implementations,
-not reproducing a known Maskin/Moore-Repullo style construction with states in
-the message.
+message-space complexity against the latent mechanism's reference complexity.
+This is not a proof of global minimality, but it gives the learner a concrete
+compactness target and makes the task about finding small implementations, not
+reproducing a known Maskin/Moore-Repullo style construction with states in the
+message.
 
 # Editable Files
 

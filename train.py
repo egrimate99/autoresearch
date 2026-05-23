@@ -111,7 +111,7 @@ def main() -> int:
         hidden_dim=int(training["hidden_dim"]),
         max_messages=max_messages,
     ).to(device)
-    optimizer = torch.optim.AdamW(model.parameters(), lr=float(training["lr"]), weight_decay=1e-3)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=float(training["lr"]), weight_decay=2e-3)
     features = features.to(device)
     target_tables = target_tables.to(device)
     valid_profile_mask = valid_profile_mask.to(device)

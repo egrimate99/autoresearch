@@ -41,6 +41,7 @@ def _training_config(config: dict[str, Any], seed_override: int | None) -> dict[
     training.setdefault("device", "cpu")
     training.setdefault("effective_num_scrs", 2048)
     training.setdefault("rl_steps", 0)
+    training["effective_num_scrs"] = max(int(training["effective_num_scrs"]), 8192)
     return training
 
 

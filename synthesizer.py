@@ -71,9 +71,11 @@ class TableSynthesizer(nn.Module):
             nn.Linear(feature_dim(domain), hidden_dim),
             nn.LayerNorm(hidden_dim),
             nn.GELU(),
+            nn.Dropout(0.10),
             nn.Linear(hidden_dim, hidden_dim),
             nn.LayerNorm(hidden_dim),
             nn.GELU(),
+            nn.Dropout(0.10),
         )
         self.table_head = nn.Linear(hidden_dim, self.table_output_dim)
         self.size_head = nn.Linear(hidden_dim, self.size_output_dim)

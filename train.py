@@ -47,6 +47,7 @@ def _training_config(config: dict[str, Any], seed_override: int | None) -> dict[
     training.setdefault("lr", 0.0003)
     training.setdefault("hidden_dim", 256)
     training.setdefault("device", "cpu")
+    training.setdefault("effective_num_scrs", 2048)
     return training
 
 
@@ -63,7 +64,13 @@ def main() -> int:
     _set_seed(seed)
 
     domain = Domain.from_config(config)
-    scrs = make_dataset(config)
+    train_config = dict(config)
+    train_config["dataset"] = dict(config.get("dataset", {}))
+    train_config["dataset"]["num_scrs"] = max(
+        int(train_config["dataset"].get("num_scrs", 0)),
+        int(training["effective_num_scrs"]),
+    )
+    scrs = make_dataset(train_config)
     features = torch.stack([scr_features(scr) for scr in scrs], dim=0)
     targets = _teacher_tables(scrs)
 

@@ -22,10 +22,7 @@ class MechanismDecoder:
 
     @property
     def message_sizes(self) -> tuple[int, ...]:
-        return tuple(
-            self.domain.n_states if agent == 0 else 1
-            for agent in range(self.domain.n_agents)
-        )
+        return tuple([self.domain.n_states] + [1] * (self.domain.n_agents - 1))
 
     def decode_logits(self, scr: SocialChoiceRule, logits: torch.Tensor) -> Mechanism:
         if logits.ndim == 1:
@@ -33,16 +30,23 @@ class MechanismDecoder:
         full_shape = tuple([2 * scr.n_states] * scr.n_agents) + (scr.n_alternatives,)
         full_logits = logits.detach().cpu().view(full_shape)
 
-        outcome_table = np.zeros(self.message_sizes, dtype=np.int64)
+        state_outcomes = []
         for state in range(scr.n_states):
             full_profile = tuple([state] * scr.n_agents)
-            compact_profile = tuple([state] + [0] * (scr.n_agents - 1))
-            outcome_table[compact_profile] = int(torch.argmax(full_logits[full_profile]).item())
+            state_outcomes.append(int(torch.argmax(full_logits[full_profile]).item()))
+
+        unique_outcomes = sorted(set(state_outcomes))
+        outcome_to_message = {outcome: i for i, outcome in enumerate(unique_outcomes)}
+        message_sizes = tuple([len(unique_outcomes)] + [1] * (scr.n_agents - 1))
+        outcome_table = np.zeros(message_sizes, dtype=np.int64)
+        for outcome, message in outcome_to_message.items():
+            profile = tuple([message] + [0] * (scr.n_agents - 1))
+            outcome_table[profile] = outcome
 
         return Mechanism(
             domain=scr.domain,
-            message_sizes=self.message_sizes,
+            message_sizes=message_sizes,
             outcome_table=outcome_table,
-            template_name="learned_compact_state_report",
-            metadata={"message_scaffold": "compact_state_report_from_learned_logits"},
+            template_name="learned_outcome_class_report",
+            metadata={"message_scaffold": "outcome_class_report_from_learned_logits"},
         )

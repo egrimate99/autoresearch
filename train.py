@@ -41,6 +41,7 @@ def _training_config(config: dict[str, Any], seed_override: int | None) -> dict[
     training.setdefault("device", "cpu")
     training.setdefault("effective_num_scrs", 2048)
     training.setdefault("rl_steps", 0)
+    training.setdefault("equilibrium_loss_weight", 0.10)
     training["effective_num_scrs"] = max(int(training["effective_num_scrs"]), 8192)
     return training
 
@@ -91,6 +92,13 @@ def main() -> int:
     scrs = make_dataset(train_config)
     features = torch.stack([scr_features(scr) for scr in scrs], dim=0)
     target_tables, valid_profile_mask, target_sizes = _targets(scrs, domain, max_messages)
+    utilities = torch.tensor(np.stack([scr.utilities for scr in scrs], axis=0), dtype=torch.float32)
+    utility_scale = max(1.0, float(domain.n_alternatives - 1))
+    utilities = utilities / utility_scale
+    scr_target_mask = torch.tensor(
+        np.stack([scr.target_mask for scr in scrs], axis=0),
+        dtype=torch.float32,
+    )
 
     requested_device = str(training.get("device", "cpu"))
     if requested_device == "cuda" and torch.cuda.is_available():
@@ -108,9 +116,12 @@ def main() -> int:
     target_tables = target_tables.to(device)
     valid_profile_mask = valid_profile_mask.to(device)
     target_sizes = target_sizes.to(device)
+    utilities = utilities.to(device)
+    scr_target_mask = scr_target_mask.to(device)
 
     epochs = int(training["epochs"])
     batch_size = int(training["batch_size"])
+    equilibrium_weight = float(training["equilibrium_loss_weight"])
     n = features.shape[0]
     last_loss = 0.0
     last_table_acc = 0.0
@@ -126,6 +137,9 @@ def main() -> int:
                 target_tables[idx],
                 valid_profile_mask[idx],
                 target_sizes[idx],
+                utilities[idx],
+                scr_target_mask[idx],
+                equilibrium_weight,
             )
             optimizer.zero_grad(set_to_none=True)
             loss.backward()
@@ -135,7 +149,15 @@ def main() -> int:
             with torch.no_grad():
                 outputs = model(features)
                 last_loss = float(
-                    synthesis_loss(outputs, target_tables, valid_profile_mask, target_sizes).item()
+                    synthesis_loss(
+                        outputs,
+                        target_tables,
+                        valid_profile_mask,
+                        target_sizes,
+                        utilities,
+                        scr_target_mask,
+                        equilibrium_weight,
+                    ).item()
                 )
                 last_table_acc = table_accuracy(outputs, target_tables, valid_profile_mask)
                 last_size_acc = size_accuracy(outputs, target_sizes)

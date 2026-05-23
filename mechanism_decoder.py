@@ -46,6 +46,20 @@ class MechanismDecoder:
             device=masked_logits.device,
         )
         masked_logits = masked_logits + 0.20 * torch.log(target_counts.clamp_min(1.0))
+        utilities = torch.as_tensor(
+            scr.utilities,
+            dtype=masked_logits.dtype,
+            device=masked_logits.device,
+        ) / max(1.0, float(scr.n_alternatives - 1))
+        target_by_state = torch.as_tensor(
+            scr.target_mask,
+            dtype=torch.bool,
+            device=masked_logits.device,
+        )
+        non_target = (~target_by_state).to(masked_logits.dtype)
+        non_target_mass = non_target.sum(dim=0).clamp_min(1.0)
+        bad_attraction = (utilities.mean(dim=1) * non_target).sum(dim=0) / non_target_mass
+        masked_logits = masked_logits - 0.03 * bad_attraction
         predicted = torch.argmax(masked_logits, dim=-1).detach().cpu().numpy().astype(np.int64)
         full_table = predicted.reshape(tuple([self.max_messages] * scr.n_agents))
         outcome_table = np.zeros(message_sizes, dtype=np.int64)

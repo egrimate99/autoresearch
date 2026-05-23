@@ -14,8 +14,8 @@ class MechanismDecoder:
     """Decode template logits into small finite mechanisms.
 
     Initial templates:
-    - dictator_i: every agent sends an alternative; outcome is agent i's message
-    - constant_a: every message profile maps to alternative a
+    - dictator_i: only agent i sends an alternative; others send one dummy message
+    - constant_a: every agent sends one dummy message
     """
 
     def __init__(self, domain: Domain):
@@ -35,16 +35,20 @@ class MechanismDecoder:
         return self.decode_template(scr, index)
 
     def decode_template(self, scr: SocialChoiceRule, index: int) -> Mechanism:
-        message_sizes = tuple([scr.n_alternatives] * scr.n_agents)
-        outcome_table = np.zeros(message_sizes, dtype=np.int64)
-
         if index < scr.n_agents:
             dictator = index
+            message_sizes = tuple(
+                scr.n_alternatives if agent == dictator else 1
+                for agent in range(scr.n_agents)
+            )
+            outcome_table = np.zeros(message_sizes, dtype=np.int64)
             for profile in product(*(range(size) for size in message_sizes)):
                 outcome_table[profile] = profile[dictator]
             metadata = {"dictator": dictator}
         else:
             alternative = index - scr.n_agents
+            message_sizes = tuple([1] * scr.n_agents)
+            outcome_table = np.zeros(message_sizes, dtype=np.int64)
             outcome_table.fill(alternative)
             metadata = {"constant_alternative": alternative}
 

@@ -230,6 +230,73 @@ def _ensure_singleton_target_coverage(
                 ),
             )
             adjusted[profile] = int(best_outcome)
+    for theta in range(scr.n_states):
+        target_outcomes = np.flatnonzero(scr.target_mask[theta]).astype(int).tolist()
+        if any(
+            _singleton_stability_cost(adjusted, message_sizes, scr, profile, int(outcome), [int(theta)])
+            <= 1.0e-9
+            for profile in itertools.product(*(range(size) for size in message_sizes))
+            for outcome in target_outcomes
+            if int(adjusted[profile]) == int(outcome)
+        ):
+            continue
+        if not candidates:
+            break
+        best_index, (_, _, profile, outcome, cost) = min(
+            (
+                (candidate_index, (*candidate, int(outcome), _singleton_stability_cost(
+                    adjusted,
+                    message_sizes,
+                    scr,
+                    candidate[2],
+                    int(outcome),
+                    [int(theta)],
+                )))
+                for candidate_index, candidate in enumerate(candidates)
+                for outcome in target_outcomes
+            ),
+            key=lambda item: (item[1][4], item[1][0], item[1][1]),
+        )
+        if cost <= 3.0:
+            _stabilize_target_profile(
+                adjusted,
+                message_sizes,
+                scr,
+                masked_logits,
+                max_messages,
+                int(theta),
+                profile,
+                int(outcome),
+            )
+            candidates.pop(best_index)
+    for theta in np.flatnonzero(singleton_states):
+        theta = int(theta)
+        outcome = int(np.argmax(scr.target_mask[theta]))
+        for profile in itertools.product(*(range(size) for size in message_sizes)):
+            if int(adjusted[profile]) == outcome:
+                continue
+            if _is_profile_stable(adjusted, message_sizes, scr, theta, profile):
+                adjusted[profile] = outcome
+    for theta in binary_states:
+        theta = int(theta)
+        target_outcomes = np.flatnonzero(scr.target_mask[theta]).astype(int).tolist()
+        for profile in itertools.product(*(range(size) for size in message_sizes)):
+            if int(adjusted[profile]) in target_outcomes:
+                continue
+            if not _is_profile_stable(adjusted, message_sizes, scr, theta, profile):
+                continue
+            best_outcome = min(
+                target_outcomes,
+                key=lambda outcome: _singleton_stability_cost(
+                    adjusted,
+                    message_sizes,
+                    scr,
+                    profile,
+                    int(outcome),
+                    [theta],
+                ),
+            )
+            adjusted[profile] = int(best_outcome)
     return adjusted
 
 

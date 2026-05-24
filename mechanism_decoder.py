@@ -355,7 +355,12 @@ class MechanismDecoder:
         if size_logits.ndim == 3:
             size_logits = size_logits[0]
 
-        size_labels = torch.argmax(size_logits, dim=-1).detach().cpu().numpy().astype(int)
+        size_penalty = 0.05 * torch.arange(
+            self.max_messages,
+            dtype=size_logits.dtype,
+            device=size_logits.device,
+        )
+        size_labels = torch.argmax(size_logits - size_penalty, dim=-1).detach().cpu().numpy().astype(int)
         message_sizes = tuple((size_labels + 1).tolist())
 
         allowed = torch.as_tensor(

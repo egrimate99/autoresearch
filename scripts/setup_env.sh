@@ -14,8 +14,23 @@ else
   exit 127
 fi
 
-if ! "$PYTHON" -m uv --version >/dev/null 2>&1; then
-  "$PYTHON" -m pip install --user uv
+if [[ -z "${UV:-}" ]]; then
+  if command -v uv >/dev/null 2>&1; then
+    UV=uv
+  elif "$PYTHON" -m uv --version >/dev/null 2>&1; then
+    UV="$PYTHON -m uv"
+  else
+    "$PYTHON" -m pip install --user uv
+    if command -v uv >/dev/null 2>&1; then
+      UV=uv
+    else
+      UV="$PYTHON -m uv"
+    fi
+  fi
 fi
 
-"$PYTHON" -m uv sync
+echo "PYTHON=$PYTHON"
+echo "UV=$UV"
+
+# shellcheck disable=SC2086
+$UV sync

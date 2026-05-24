@@ -53,6 +53,9 @@ If environment setup asks for a setup script, use:
 bash scripts/setup_env.sh
 ```
 
+The scripts accept either a standalone `uv` binary or `python -m uv`. Codex
+Cloud often has `/root/.local/bin/uv` already installed; that is enough.
+
 ## Important limitation
 
 The ChatGPT/Codex subscription remote path is started from Codex web, IDE, or

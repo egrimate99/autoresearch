@@ -73,9 +73,15 @@ if [[ -z "${PYTHON:-}" ]]; then
 fi
 
 if ! "$PYTHON" -m uv --version >/dev/null 2>&1; then
-  echo "$PYTHON cannot run 'python -m uv'. Install uv first:" >&2
-  echo "  $PYTHON -m pip install --user uv" >&2
-  exit 127
+  if command -v uv >/dev/null 2>&1; then
+    UV_CMD=(uv)
+  else
+    echo "Could not find uv. Run setup first:" >&2
+    echo "  bash scripts/setup_env.sh" >&2
+    exit 127
+  fi
+else
+  UV_CMD=("$PYTHON" -m uv)
 fi
 
 run_timeout() {
@@ -88,27 +94,27 @@ run_timeout() {
   fi
 }
 
-run_timeout 30m "$PYTHON" -m uv run python train.py \
+run_timeout 30m "${UV_CMD[@]}" run python train.py \
   --config configs/train.yaml \
   --out results/latest \
   "${TRAIN_DEVICE_ARGS[@]}"
 
-run_timeout 10m "$PYTHON" -m uv run python verify.py \
+run_timeout 10m "${UV_CMD[@]}" run python verify.py \
   --config configs/eval_train_scrs.yaml \
   --checkpoint results/latest \
   --json results/verify_train.json
 
-run_timeout 10m "$PYTHON" -m uv run python verify.py \
+run_timeout 10m "${UV_CMD[@]}" run python verify.py \
   --config configs/eval_holdout_scrs.yaml \
   --checkpoint results/latest \
   --json results/verify_holdout.json
 
-run_timeout 10m "$PYTHON" -m uv run python verify.py \
+run_timeout 10m "${UV_CMD[@]}" run python verify.py \
   --config configs/eval_negative_scrs.yaml \
   --checkpoint results/latest \
   --json results/verify_negative.json
 
-"$PYTHON" -m uv run python aggregate.py \
+"${UV_CMD[@]}" run python aggregate.py \
   results/verify_train.json \
   results/verify_holdout.json \
   results/verify_negative.json

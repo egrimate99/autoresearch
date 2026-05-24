@@ -23,8 +23,20 @@ command -v free >/dev/null 2>&1 && free -h || true
 
 echo "== python =="
 echo "PYTHON=$PYTHON"
-if "$PYTHON" -m uv --version >/dev/null 2>&1; then
-  "$PYTHON" -m uv run python - <<'PY'
+if [[ -z "${UV:-}" ]]; then
+  if "$PYTHON" -m uv --version >/dev/null 2>&1; then
+    UV="$PYTHON -m uv"
+  elif command -v uv >/dev/null 2>&1; then
+    UV=uv
+  else
+    UV=""
+  fi
+fi
+
+if [[ -n "$UV" ]]; then
+  echo "UV=$UV"
+  # shellcheck disable=SC2086
+  $UV run python - <<'PY'
 import platform
 import sys
 

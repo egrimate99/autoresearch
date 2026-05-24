@@ -39,7 +39,7 @@ class MechanismDecoder:
             device=table_logits.device,
         )
         masked_logits = table_logits.clone()
-        masked_logits[:, ~allowed] = masked_logits[:, ~allowed] - 2.6
+        masked_logits[:, ~allowed] = masked_logits[:, ~allowed] - 2.7
         target_counts = torch.as_tensor(
             scr.target_mask.sum(axis=0),
             dtype=masked_logits.dtype,

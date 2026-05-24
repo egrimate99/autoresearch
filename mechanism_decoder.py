@@ -355,7 +355,7 @@ class MechanismDecoder:
         if size_logits.ndim == 3:
             size_logits = size_logits[0]
 
-        size_penalty = 0.05 * torch.arange(
+        size_penalty = 0.075 * torch.arange(
             self.max_messages,
             dtype=size_logits.dtype,
             device=size_logits.device,

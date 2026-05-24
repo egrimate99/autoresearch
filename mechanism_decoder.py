@@ -65,9 +65,51 @@ def _ensure_singleton_target_coverage(
     candidates.sort(key=lambda item: (item[0], item[1]))
 
     adjusted = outcome_table.copy()
-    for outcome, (_, _, profile) in zip(missing, candidates):
+    for outcome in missing:
+        target_states = [
+            int(theta)
+            for theta in np.flatnonzero(singleton_states)
+            if int(np.argmax(scr.target_mask[theta])) == outcome
+        ]
+        if not candidates:
+            break
+        best_index, (_, _, profile) = min(
+            enumerate(candidates),
+            key=lambda item: (
+                _singleton_stability_cost(outcome_table, message_sizes, scr, item[1][2], outcome, target_states),
+                item[1][0],
+                item[1][1],
+            ),
+        )
         adjusted[profile] = outcome
+        candidates.pop(best_index)
     return adjusted
+
+
+def _singleton_stability_cost(
+    outcome_table: np.ndarray,
+    message_sizes: tuple[int, ...],
+    scr: SocialChoiceRule,
+    profile: tuple[int, ...],
+    outcome: int,
+    target_states: list[int],
+) -> float:
+    cost = 0.0
+    for theta in target_states:
+        for agent in range(scr.n_agents):
+            current_utility = scr.utility(theta, agent, outcome)
+            best_gain = 0.0
+            for message in range(message_sizes[agent]):
+                if message == profile[agent]:
+                    continue
+                deviated = list(profile)
+                deviated[agent] = message
+                deviated_outcome = int(outcome_table[tuple(deviated)])
+                gain = scr.utility(theta, agent, deviated_outcome) - current_utility
+                if gain > best_gain:
+                    best_gain = gain
+            cost += best_gain
+    return cost
 
 
 class MechanismDecoder:

@@ -13,6 +13,7 @@ single hand-solved SCR.
 Before starting the loop, run:
 
 ```bash
+bash scripts/setup_env.sh
 bash scripts/probe_runtime.sh
 bash scripts/eval_once.sh auto
 ```

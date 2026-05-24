@@ -47,6 +47,12 @@ bash scripts/eval_once.sh auto
 
 That uses CUDA if the cloud PyTorch runtime sees it, otherwise CPU.
 
+If environment setup asks for a setup script, use:
+
+```bash
+bash scripts/setup_env.sh
+```
+
 ## Important limitation
 
 The ChatGPT/Codex subscription remote path is started from Codex web, IDE, or

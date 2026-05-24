@@ -8,8 +8,10 @@ if [[ -z "${PYTHON:-}" ]]; then
     PYTHON=python
   elif command -v python.exe >/dev/null 2>&1; then
     PYTHON=python.exe
+  elif command -v python3 >/dev/null 2>&1; then
+    PYTHON=python3
   else
-    echo "Could not find python or python.exe on PATH." >&2
+    echo "Could not find python, python3, or python.exe on PATH." >&2
     exit 127
   fi
 fi
@@ -21,7 +23,8 @@ command -v free >/dev/null 2>&1 && free -h || true
 
 echo "== python =="
 echo "PYTHON=$PYTHON"
-"$PYTHON" -m uv run python - <<'PY'
+if "$PYTHON" -m uv --version >/dev/null 2>&1; then
+  "$PYTHON" -m uv run python - <<'PY'
 import platform
 import sys
 
@@ -34,6 +37,25 @@ print("cuda_available", torch.cuda.is_available())
 if torch.cuda.is_available():
     print("cuda_device", torch.cuda.get_device_name(0))
 PY
+else
+  echo "uv_available=false"
+  "$PYTHON" - <<'PY'
+import platform
+import sys
+
+print("executable", sys.executable)
+print("platform", platform.platform())
+try:
+    import torch
+except Exception as exc:
+    print("torch_import_error", repr(exc))
+else:
+    print("torch", torch.__version__)
+    print("cuda_available", torch.cuda.is_available())
+    if torch.cuda.is_available():
+        print("cuda_device", torch.cuda.get_device_name(0))
+PY
+fi
 
 echo "== nvidia-smi =="
 nvidia-smi || true

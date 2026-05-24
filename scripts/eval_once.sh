@@ -64,10 +64,18 @@ if [[ -z "${PYTHON:-}" ]]; then
     PYTHON=python
   elif command -v python.exe >/dev/null 2>&1; then
     PYTHON=python.exe
+  elif command -v python3 >/dev/null 2>&1; then
+    PYTHON=python3
   else
-    echo "Could not find python or python.exe on PATH." >&2
+    echo "Could not find python, python3, or python.exe on PATH." >&2
     exit 127
   fi
+fi
+
+if ! "$PYTHON" -m uv --version >/dev/null 2>&1; then
+  echo "$PYTHON cannot run 'python -m uv'. Install uv first:" >&2
+  echo "  $PYTHON -m pip install --user uv" >&2
+  exit 127
 fi
 
 run_timeout() {

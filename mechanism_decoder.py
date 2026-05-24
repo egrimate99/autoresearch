@@ -46,12 +46,11 @@ def _ensure_singleton_target_coverage(
     max_messages: int,
 ) -> np.ndarray:
     singleton_states = scr.target_mask.sum(axis=1) == 1
-    if not np.any(singleton_states):
-        return outcome_table
-    required = set(np.argmax(scr.target_mask[singleton_states], axis=1).astype(int).tolist())
+    if np.any(singleton_states):
+        required = set(np.argmax(scr.target_mask[singleton_states], axis=1).astype(int).tolist())
+    else:
+        required = set()
     missing = sorted(required - set(outcome_table.reshape(-1).astype(int).tolist()))
-    if not missing:
-        return outcome_table
 
     target_union = set(np.flatnonzero(scr.target_mask.any(axis=0)).astype(int).tolist())
     candidates = []

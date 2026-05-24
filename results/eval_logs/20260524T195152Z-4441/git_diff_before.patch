@@ -1,0 +1,29 @@
+diff --git a/train.py b/train.py
+index 0de3d00..56a6e71 100644
+--- a/train.py
++++ b/train.py
+@@ -145,6 +145,7 @@ def main() -> int:
+     epochs = int(training["epochs"])
+     batch_size = int(training["batch_size"])
+     equilibrium_weight = float(training["equilibrium_loss_weight"])
++    equilibrium_warmup_epochs = max(1, epochs // 5)
+     n = features.shape[0]
+     last_loss = 0.0
+     last_table_acc = 0.0
+@@ -155,6 +156,7 @@ def main() -> int:
+         for start in range(0, n, batch_size):
+             idx = order[start : start + batch_size]
+             outputs = model(features[idx])
++            epoch_equilibrium_weight = equilibrium_weight * min(1.0, float(epoch + 1) / float(equilibrium_warmup_epochs))
+             loss = synthesis_loss(
+                 outputs,
+                 target_tables[idx],
+@@ -162,7 +164,7 @@ def main() -> int:
+                 target_sizes[idx],
+                 utilities[idx],
+                 scr_target_mask[idx],
+-                equilibrium_weight,
++                epoch_equilibrium_weight,
+             )
+             optimizer.zero_grad(set_to_none=True)
+             loss.backward()

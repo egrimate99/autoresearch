@@ -1,0 +1,1 @@
+ramp equilibrium surrogate weight over first 20% epochs to stabilize table fitting then equilibrium shaping

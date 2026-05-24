@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import itertools
 import json
+import os
 import random
 from pathlib import Path
 from typing import Any
@@ -28,7 +29,11 @@ def _set_seed(seed: int) -> None:
     torch.manual_seed(seed)
 
 
-def _training_config(config: dict[str, Any], seed_override: int | None) -> dict[str, Any]:
+def _training_config(
+    config: dict[str, Any],
+    seed_override: int | None,
+    device_override: str | None = None,
+) -> dict[str, Any]:
     training = dict(config.get("training", {}))
     if seed_override is not None:
         training["seed"] = int(seed_override)
@@ -42,6 +47,9 @@ def _training_config(config: dict[str, Any], seed_override: int | None) -> dict[
     training.setdefault("effective_num_scrs", 2048)
     training.setdefault("rl_steps", 0)
     training.setdefault("equilibrium_loss_weight", 0.05625)
+    selected_device = device_override or os.environ.get("AUTORESEARCH_DEVICE")
+    if selected_device:
+        training["device"] = selected_device.strip().lower()
     training["epochs"] = max(int(training["epochs"]), 100)
     training["effective_num_scrs"] = max(int(training["effective_num_scrs"]), 8192)
     return training
@@ -75,10 +83,16 @@ def main() -> int:
     parser.add_argument("--config", required=True, help="Training config YAML.")
     parser.add_argument("--out", required=True, help="Output checkpoint directory.")
     parser.add_argument("--seed", type=int, default=None, help="Optional seed override.")
+    parser.add_argument(
+        "--device",
+        choices=("cpu", "cuda", "auto"),
+        default=None,
+        help="Override training.device from the config.",
+    )
     args = parser.parse_args()
 
     config = load_config(args.config)
-    training = _training_config(config, args.seed)
+    training = _training_config(config, args.seed, args.device)
     seed = int(training["seed"])
     _set_seed(seed)
 
@@ -101,11 +115,19 @@ def main() -> int:
         dtype=torch.float32,
     )
 
-    requested_device = str(training.get("device", "cpu"))
-    if requested_device == "cuda" and torch.cuda.is_available():
+    requested_device = str(training.get("device", "cpu")).lower()
+    if requested_device == "auto":
+        requested_device = "cuda" if torch.cuda.is_available() else "cpu"
+    if requested_device == "cuda":
+        if not torch.cuda.is_available():
+            raise RuntimeError("training.device is 'cuda', but CUDA is not available to PyTorch.")
         device = torch.device("cuda")
-    else:
+    elif requested_device == "cpu":
         device = torch.device("cpu")
+    else:
+        raise ValueError("training.device must be one of: cpu, cuda, auto.")
+    training["device"] = str(device)
+    config.setdefault("training", {})["device"] = str(device)
 
     model = TableSynthesizer(
         domain,
@@ -175,6 +197,7 @@ def main() -> int:
         "hidden_dim": int(training["hidden_dim"]),
         "max_messages": max_messages,
         "config": config,
+        "device": str(device),
         "train_loss": last_loss,
         "table_acc": last_table_acc,
         "size_acc": last_size_acc,
@@ -188,6 +211,7 @@ def main() -> int:
         "table_acc": last_table_acc,
         "size_acc": last_size_acc,
         "checkpoint": str(out_dir / "checkpoint.pt"),
+        "device": str(device),
     }
     with open(out_dir / "train_summary.json", "w", encoding="utf-8") as f:
         json.dump(summary, f, indent=2)
@@ -195,6 +219,7 @@ def main() -> int:
     print(f"TRAIN_LOSS={last_loss:.6f}")
     print(f"TRAIN_TABLE_ACC={last_table_acc:.6f}")
     print(f"TRAIN_SIZE_ACC={last_size_acc:.6f}")
+    print(f"TRAIN_DEVICE={device}")
     print(f"CHECKPOINT={out_dir / 'checkpoint.pt'}")
     return 0
 

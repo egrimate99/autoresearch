@@ -20,6 +20,6 @@ training:
   batch_size: 32
   lr: 0.0005
   hidden_dim: 256
-  device: cpu
+  device: cuda
   effective_num_scrs: 2048
   rl_steps: 0

@@ -26,6 +26,23 @@ cd C:\Mate\Mathematics\implementation_autoresearch
 bash scripts/eval_once.sh
 ```
 
+Choose a runtime explicitly:
+
+```powershell
+# Local CPU
+bash scripts/eval_once.sh cpu
+
+# Local CUDA GPU
+bash scripts/eval_once.sh gpu
+
+# Auto-detect CUDA, otherwise CPU
+bash scripts/eval_once.sh auto
+```
+
+`configs/train.yaml` currently defaults to CUDA. The command-line selector
+passes `--device` to `train.py`, so you do not need to edit YAML to switch
+between CPU and GPU.
+
 If `bash` is not available, run the same stages directly:
 
 ```powershell
@@ -37,6 +54,14 @@ python -m uv run python aggregate.py results/verify_train.json results/verify_ho
 ```
 
 The last command prints `FINAL_SCORE=...`. Lower is better.
+
+## Codex Cloud
+
+Codex Cloud uses a GitHub checkout, not this local directory. Push the current
+branch, then start a task at `https://chatgpt.com/codex` using the prompt in
+`.github/codex/prompts/autoresearch-loop.md`.
+
+Details are in `docs/codex_cloud.md`.
 
 ## Autoresearch Files
 

@@ -10,6 +10,15 @@ import torch
 from envs import Domain, Mechanism, SocialChoiceRule
 
 
+def _flat_profile_index(profile: tuple[int, ...], max_messages: int) -> int:
+    flat_idx = 0
+    stride = 1
+    for message in reversed(profile):
+        flat_idx += message * stride
+        stride *= max_messages
+    return flat_idx
+
+
 def _merge_duplicate_messages(outcome_table: np.ndarray, message_sizes: tuple[int, ...]) -> tuple[np.ndarray, tuple[int, ...]]:
     table = outcome_table
     sizes = list(message_sizes)
@@ -27,6 +36,35 @@ def _merge_duplicate_messages(outcome_table: np.ndarray, message_sizes: tuple[in
         table = np.take(table, keep, axis=axis)
         sizes[axis] = len(keep)
     return table, tuple(sizes)
+
+
+def _ensure_singleton_target_coverage(
+    outcome_table: np.ndarray,
+    message_sizes: tuple[int, ...],
+    scr: SocialChoiceRule,
+    masked_logits: torch.Tensor,
+    max_messages: int,
+) -> np.ndarray:
+    singleton_states = scr.target_mask.sum(axis=1) == 1
+    if not np.any(singleton_states):
+        return outcome_table
+    required = set(np.argmax(scr.target_mask[singleton_states], axis=1).astype(int).tolist())
+    missing = sorted(required - set(outcome_table.reshape(-1).astype(int).tolist()))
+    if not missing:
+        return outcome_table
+
+    candidates = []
+    for profile in itertools.product(*(range(size) for size in message_sizes)):
+        flat_idx = _flat_profile_index(profile, max_messages)
+        top2 = torch.topk(masked_logits[flat_idx], k=min(2, masked_logits.shape[-1])).values
+        margin = float((top2[0] - top2[-1]).detach().cpu().item())
+        candidates.append((margin, profile))
+    candidates.sort(key=lambda item: item[0])
+
+    adjusted = outcome_table.copy()
+    for outcome, (_, profile) in zip(missing, candidates):
+        adjusted[profile] = outcome
+    return adjusted
 
 
 class MechanismDecoder:
@@ -84,6 +122,13 @@ class MechanismDecoder:
         outcome_table = np.zeros(message_sizes, dtype=np.int64)
         for profile in itertools.product(*(range(size) for size in message_sizes)):
             outcome_table[profile] = full_table[profile]
+        outcome_table = _ensure_singleton_target_coverage(
+            outcome_table,
+            message_sizes,
+            scr,
+            masked_logits,
+            self.max_messages,
+        )
         outcome_table, message_sizes = _merge_duplicate_messages(outcome_table, message_sizes)
 
         return Mechanism(

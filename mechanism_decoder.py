@@ -83,6 +83,28 @@ def _ensure_singleton_target_coverage(
         )
         adjusted[profile] = outcome
         candidates.pop(best_index)
+
+    for theta in np.flatnonzero(singleton_states):
+        outcome = int(np.argmax(scr.target_mask[theta]))
+        existing_costs = [
+            _singleton_stability_cost(adjusted, message_sizes, scr, profile, outcome, [int(theta)])
+            for profile in itertools.product(*(range(size) for size in message_sizes))
+            if int(adjusted[profile]) == outcome
+        ]
+        if existing_costs and min(existing_costs) <= 1.0e-9:
+            continue
+        if not candidates:
+            break
+        best_index, (_, _, profile) = min(
+            enumerate(candidates),
+            key=lambda item: (
+                _singleton_stability_cost(adjusted, message_sizes, scr, item[1][2], outcome, [int(theta)]),
+                item[1][0],
+                item[1][1],
+            ),
+        )
+        adjusted[profile] = outcome
+        candidates.pop(best_index)
     return adjusted
 
 

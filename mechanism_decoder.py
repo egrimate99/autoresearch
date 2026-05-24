@@ -114,6 +114,27 @@ def _ensure_singleton_target_coverage(
                 continue
             if _is_profile_stable(adjusted, message_sizes, scr, theta, profile):
                 adjusted[profile] = outcome
+    binary_states = np.flatnonzero(scr.target_mask.sum(axis=1) == 2)
+    for theta in binary_states:
+        theta = int(theta)
+        target_outcomes = np.flatnonzero(scr.target_mask[theta]).astype(int).tolist()
+        for profile in itertools.product(*(range(size) for size in message_sizes)):
+            if int(adjusted[profile]) in target_outcomes:
+                continue
+            if not _is_profile_stable(adjusted, message_sizes, scr, theta, profile):
+                continue
+            best_outcome = min(
+                target_outcomes,
+                key=lambda outcome: _singleton_stability_cost(
+                    adjusted,
+                    message_sizes,
+                    scr,
+                    profile,
+                    int(outcome),
+                    [theta],
+                ),
+            )
+            adjusted[profile] = int(best_outcome)
     return adjusted
 
 

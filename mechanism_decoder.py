@@ -10,6 +10,25 @@ import torch
 from envs import Domain, Mechanism, SocialChoiceRule
 
 
+def _merge_duplicate_messages(outcome_table: np.ndarray, message_sizes: tuple[int, ...]) -> tuple[np.ndarray, tuple[int, ...]]:
+    table = outcome_table
+    sizes = list(message_sizes)
+    for axis in range(len(sizes)):
+        keep = []
+        seen = set()
+        for message in range(sizes[axis]):
+            key = tuple(np.take(table, message, axis=axis).reshape(-1).astype(int).tolist())
+            if key in seen:
+                continue
+            seen.add(key)
+            keep.append(message)
+        if len(keep) == sizes[axis]:
+            continue
+        table = np.take(table, keep, axis=axis)
+        sizes[axis] = len(keep)
+    return table, tuple(sizes)
+
+
 class MechanismDecoder:
     """Decode variable-size mechanisms from learned logits.
 
@@ -65,6 +84,7 @@ class MechanismDecoder:
         outcome_table = np.zeros(message_sizes, dtype=np.int64)
         for profile in itertools.product(*(range(size) for size in message_sizes)):
             outcome_table[profile] = full_table[profile]
+        outcome_table, message_sizes = _merge_duplicate_messages(outcome_table, message_sizes)
 
         return Mechanism(
             domain=scr.domain,

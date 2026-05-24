@@ -130,7 +130,8 @@ def _singleton_stability_cost(
                 gain = scr.utility(theta, agent, deviated_outcome) - current_utility
                 if gain > best_gain:
                     best_gain = gain
-            cost += best_gain
+            if best_gain > cost:
+                cost = best_gain
     return cost
 
 

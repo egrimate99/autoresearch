@@ -456,7 +456,7 @@ class MechanismDecoder:
         non_target = (~target_by_state).to(masked_logits.dtype)
         non_target_mass = non_target.sum(dim=0).clamp_min(1.0)
         bad_attraction = (utilities.mean(dim=1) * non_target).sum(dim=0) / non_target_mass
-        masked_logits = masked_logits - 0.03 * bad_attraction
+        masked_logits = masked_logits - 0.02 * bad_attraction
         predicted = torch.argmax(masked_logits, dim=-1).detach().cpu().numpy().astype(np.int64)
         full_table = predicted.reshape(tuple([self.max_messages] * scr.n_agents))
         outcome_table = np.zeros(message_sizes, dtype=np.int64)

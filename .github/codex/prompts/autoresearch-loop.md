@@ -15,7 +15,7 @@ Before starting the loop, run:
 ```bash
 bash scripts/setup_env.sh
 bash scripts/probe_runtime.sh
-bash scripts/eval_once.sh auto
+bash scripts/eval_logged.sh auto --hypothesis "remote baseline before autoresearch loop"
 ```
 
 Treat that first evaluation as the baseline for this remote run.
@@ -28,7 +28,7 @@ Then repeat until I interrupt you:
 3. Run:
 
    ```bash
-   bash scripts/eval_once.sh auto
+   bash scripts/eval_logged.sh auto --hypothesis "exact hypothesis for this attempted change"
    ```
 
 4. Accept only if `FINAL_SCORE` decreases and
@@ -36,10 +36,16 @@ Then repeat until I interrupt you:
 5. Prefer accepted changes that reduce `holdout_bad_equilibrium_error` and
    `holdout_missing_good_equilibrium_error`.
 6. If a change fails, revert it and try a different class of idea.
-7. Append a detailed JSON record to `results/runs.jsonl`.
-8. Also log detailed ideas, failure modes, and observations in
+7. Keep the generated `results/eval_logs/<run_id>/` directory and
+   `results/eval_logs/index.jsonl`. These contain full stdout/stderr, all
+   printed metrics, verifier JSONs, train summary, git status, and pre-run diff.
+8. Append a detailed JSON decision record to `results/runs.jsonl`, including
+   `eval_log_dir` and `eval_output_log`.
+9. Also log detailed ideas, failure modes, and observations in
    `results/idea_log.md`.
-9. Commit accepted code changes.
+10. Commit logs after every attempt, even rejected attempts. For accepted
+    attempts, commit code and logs together. For rejected attempts, revert code
+    first, then commit only the logs.
 
 Do not edit:
 
@@ -49,7 +55,7 @@ Do not edit:
 - `verify.py`
 - `aggregate.py`
 - `configs/*.yaml`
-- `scripts/*.sh`
+- `scripts/*.sh`, except invoking them
 - `.github/codex/prompts/*.md`
 
 Do not stop because several ideas fail.

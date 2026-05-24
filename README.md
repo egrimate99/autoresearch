@@ -55,6 +55,32 @@ python -m uv run python aggregate.py results/verify_train.json results/verify_ho
 
 The last command prints `FINAL_SCORE=...`. Lower is better.
 
+## Logged Evaluations
+
+For autoresearch loops, prefer the logged wrapper:
+
+```powershell
+bash scripts/eval_logged.sh auto --hypothesis "baseline or attempted idea"
+```
+
+It runs `scripts/eval_once.sh`, saves the complete command output, archives the
+train summary and verifier JSON files, records git state/diff, and appends an
+index record to `results/eval_logs/index.jsonl`.
+
+Each attempt gets a directory:
+
+```text
+results/eval_logs/<run_id>/
+  output.log
+  train_summary.json
+  verify_train.json
+  verify_holdout.json
+  verify_negative.json
+  git_diff_before.patch
+  git_status_before.txt
+  git_status_after.txt
+```
+
 ## Codex Cloud
 
 Codex Cloud uses a GitHub checkout, not this local directory. Push the current

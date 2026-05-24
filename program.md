@@ -88,11 +88,16 @@ Disallowed:
 After every attempted change, run:
 
 ```bash
-./scripts/eval_once.sh
+./scripts/eval_logged.sh auto --hypothesis "short description of this attempt"
 ```
 
-This trains the synthesizer, evaluates train SCRs, heldout SCRs, and negative
-controls, then prints a scalar FINAL_SCORE.
+This wraps `eval_once.sh`, trains the synthesizer, evaluates train SCRs,
+heldout SCRs, and negative controls, then prints a scalar FINAL_SCORE.
+
+The wrapper must be used for every iteration because it archives the full
+stdout/stderr output, train summary, verifier JSONs, git status, and pre-run
+diff under `results/eval_logs/<run_id>/`, then appends an index record to
+`results/eval_logs/index.jsonl`.
 
 # Acceptance Rule
 
@@ -118,12 +123,27 @@ Optimize in this order:
 
 # Logging
 
+Preserve all experiment information, even rejected ideas. Every iteration must
+leave enough data in the repository to reconstruct what happened when the same
+branch is later resumed locally or in Codex Cloud.
+
+For every attempted change:
+
+1. run `scripts/eval_logged.sh`
+2. keep the generated `results/eval_logs/<run_id>/` directory
+3. keep `results/eval_logs/index.jsonl`
+4. append a decision record to `results/runs.jsonl`
+5. append a human-readable note to `results/idea_log.md`
+6. commit the logs after the decision is made
+
 Append one JSON object to results/runs.jsonl after every experiment:
 
 ```json
 {
   "timestamp": "...",
   "hypothesis": "...",
+  "eval_log_dir": "results/eval_logs/...",
+  "eval_output_log": "results/eval_logs/.../output.log",
   "files_changed": ["..."],
   "train_score": 0.0,
   "holdout_score": 0.0,

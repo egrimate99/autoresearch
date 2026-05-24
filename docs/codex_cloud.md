@@ -42,7 +42,7 @@ environment. Codex Cloud does not document a guaranteed GPU for these tasks, so
 the prompt uses:
 
 ```bash
-bash scripts/eval_once.sh auto
+bash scripts/eval_logged.sh auto --hypothesis "remote baseline before autoresearch loop"
 ```
 
 That uses CUDA if the cloud PyTorch runtime sees it, otherwise CPU.
@@ -55,6 +55,10 @@ bash scripts/setup_env.sh
 
 The scripts accept either a standalone `uv` binary or `python -m uv`. Codex
 Cloud often has `/root/.local/bin/uv` already installed; that is enough.
+
+Use `scripts/eval_logged.sh` for every cloud and local attempt. It stores the
+full raw output and archived metric files under `results/eval_logs/`, so a
+cloud run can later be resumed locally without losing rejected-idea history.
 
 ## Important limitation
 

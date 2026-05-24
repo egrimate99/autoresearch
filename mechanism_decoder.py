@@ -53,16 +53,19 @@ def _ensure_singleton_target_coverage(
     if not missing:
         return outcome_table
 
+    target_union = set(np.flatnonzero(scr.target_mask.any(axis=0)).astype(int).tolist())
     candidates = []
     for profile in itertools.product(*(range(size) for size in message_sizes)):
         flat_idx = _flat_profile_index(profile, max_messages)
         top2 = torch.topk(masked_logits[flat_idx], k=min(2, masked_logits.shape[-1])).values
         margin = float((top2[0] - top2[-1]).detach().cpu().item())
-        candidates.append((margin, profile))
-    candidates.sort(key=lambda item: item[0])
+        current_outcome = int(outcome_table[profile])
+        outside_union_rank = 0 if current_outcome not in target_union else 1
+        candidates.append((outside_union_rank, margin, profile))
+    candidates.sort(key=lambda item: (item[0], item[1]))
 
     adjusted = outcome_table.copy()
-    for outcome, (_, profile) in zip(missing, candidates):
+    for outcome, (_, _, profile) in zip(missing, candidates):
         adjusted[profile] = outcome
     return adjusted
 

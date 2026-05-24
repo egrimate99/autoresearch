@@ -26,14 +26,14 @@ From PowerShell:
 
 ```powershell
 git status --short
-git push winrtx winrtx-setup
+git push myfork winrtx-setup
 ```
 
 Then:
 
 1. Open `https://chatgpt.com/codex`.
 2. Connect GitHub if needed.
-3. Select `jsegov/autoresearch-win-rtx`.
+3. Select `egrimate99/autoresearch`.
 4. Select branch `winrtx-setup`.
 5. Paste the prompt from `.github/codex/prompts/autoresearch-loop.md`.
 
@@ -59,6 +59,30 @@ Cloud often has `/root/.local/bin/uv` already installed; that is enough.
 Use `scripts/eval_logged.sh` for every cloud and local attempt. It stores the
 full raw output and archived metric files under `results/eval_logs/`, so a
 cloud run can later be resumed locally without losing rejected-idea history.
+
+## Saving Cloud Results
+
+Codex Cloud may run in a checkout with no `origin` remote configured. That is
+not fatal for evaluation, but it means a local commit inside the task is not
+automatically visible in this repository.
+
+At the end of every cloud session, make sure one of these happened:
+
+1. Codex created a PR containing the commits.
+2. Codex pushed the task branch to GitHub.
+3. You copied/exported the patch from the Codex UI.
+
+If a cloud task reports a commit hash that is not visible from local
+`git fetch myfork`, the commit is still only inside that task. Do not close the
+task until you create a PR or otherwise export the diff/log artifacts.
+
+To check locally whether cloud changes reached GitHub:
+
+```powershell
+git fetch myfork
+git branch -r --contains <commit-hash>
+git show --stat --oneline <commit-hash>
+```
 
 ## Important limitation
 

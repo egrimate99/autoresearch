@@ -22,9 +22,15 @@ the code change is rejected.
 For OpenAI Codex Cloud, use:
 
 ```bash
+git remote -v || true
+git status --short --branch || true
 bash scripts/probe_runtime.sh
 bash scripts/eval_logged.sh auto --hypothesis "remote baseline"
 ```
+
+If no git remote is configured, continue from the checked-out files. Commit
+logs/results inside the task, then use the Codex UI to create a PR or export
+the patch before ending the session.
 
 During an autoresearch loop, read `program.md` and edit only:
 

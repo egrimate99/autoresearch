@@ -13,10 +13,18 @@ single hand-solved SCR.
 Before starting the loop, run:
 
 ```bash
+git remote -v || true
+git branch --show-current || true
+git status --short --branch || true
 bash scripts/setup_env.sh
 bash scripts/probe_runtime.sh
 bash scripts/eval_logged.sh auto --hypothesis "remote baseline before autoresearch loop"
 ```
+
+Do not block if no `origin` remote is configured. Some Codex Cloud checkouts
+are detached or patch-based and still contain the correct branch contents.
+Continue from the checked-out files, and preserve results by committing logs in
+the task and using the Codex UI to create a PR or export the patch at the end.
 
 Treat that first evaluation as the baseline for this remote run.
 
@@ -46,6 +54,10 @@ Then repeat until I interrupt you:
 10. Commit logs after every attempt, even rejected attempts. For accepted
     attempts, commit code and logs together. For rejected attempts, revert code
     first, then commit only the logs.
+11. Before stopping, report the latest commit hash and whether it has been
+    pushed or exposed as a PR. If no remote exists, explicitly say that the
+    commit exists only inside the Codex task and ask the user to create a PR or
+    export the patch before closing the task.
 
 Do not edit:
 

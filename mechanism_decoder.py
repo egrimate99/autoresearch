@@ -132,7 +132,7 @@ def _ensure_singleton_target_coverage(
             ),
             key=lambda item: (item[1][4], item[1][0], item[1][1]),
         )
-        if cost <= 2.0:
+        if cost <= 3.0:
             _stabilize_target_profile(
                 adjusted,
                 message_sizes,

@@ -153,7 +153,7 @@ def _ensure_singleton_target_coverage(
                 continue
             if _is_profile_stable(adjusted, message_sizes, scr, theta, profile):
                 adjusted[profile] = outcome
-    binary_states = np.flatnonzero(scr.target_mask.sum(axis=1) == 2)
+    binary_states = np.flatnonzero((scr.target_mask.sum(axis=1) >= 2) & (scr.target_mask.sum(axis=1) <= 3))
     for theta in binary_states:
         theta = int(theta)
         target_outcomes = np.flatnonzero(scr.target_mask[theta]).astype(int).tolist()

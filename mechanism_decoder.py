@@ -132,8 +132,17 @@ def _ensure_singleton_target_coverage(
             ),
             key=lambda item: (item[1][4], item[1][0], item[1][1]),
         )
-        if cost <= 1.0e-9:
-            adjusted[profile] = int(outcome)
+        if cost <= 1.0:
+            _stabilize_target_profile(
+                adjusted,
+                message_sizes,
+                scr,
+                masked_logits,
+                max_messages,
+                int(theta),
+                profile,
+                int(outcome),
+            )
             candidates.pop(best_index)
 
     for theta in np.flatnonzero(singleton_states):
@@ -222,6 +231,60 @@ def _ensure_singleton_target_coverage(
             )
             adjusted[profile] = int(best_outcome)
     return adjusted
+
+
+def _stabilize_target_profile(
+    outcome_table: np.ndarray,
+    message_sizes: tuple[int, ...],
+    scr: SocialChoiceRule,
+    masked_logits: torch.Tensor,
+    max_messages: int,
+    theta: int,
+    profile: tuple[int, ...],
+    outcome: int,
+) -> None:
+    outcome_table[profile] = outcome
+    for agent in range(scr.n_agents):
+        current_utility = scr.utility(theta, agent, outcome)
+        for message in range(message_sizes[agent]):
+            if message == profile[agent]:
+                continue
+            deviated = list(profile)
+            deviated[agent] = message
+            deviated_profile = tuple(deviated)
+            deviated_outcome = int(outcome_table[deviated_profile])
+            if scr.utility(theta, agent, deviated_outcome) <= current_utility + 1.0e-9:
+                continue
+            outcome_table[deviated_profile] = _best_safe_deviation_outcome(
+                scr,
+                masked_logits,
+                max_messages,
+                theta,
+                agent,
+                current_utility,
+                deviated_profile,
+            )
+
+
+def _best_safe_deviation_outcome(
+    scr: SocialChoiceRule,
+    masked_logits: torch.Tensor,
+    max_messages: int,
+    theta: int,
+    agent: int,
+    current_utility: float,
+    profile: tuple[int, ...],
+) -> int:
+    flat_idx = _flat_profile_index(profile, max_messages)
+    safe_outcomes = [
+        outcome
+        for outcome in range(scr.n_alternatives)
+        if scr.utility(theta, agent, outcome) <= current_utility + 1.0e-9
+    ]
+    return max(
+        safe_outcomes,
+        key=lambda outcome: float(masked_logits[flat_idx, outcome].detach().cpu().item()),
+    )
 
 
 def _is_profile_stable(

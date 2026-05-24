@@ -260,3 +260,9 @@ Raw: results/runs.jsonl and results/experiments.csv
 - 2026-05-24T14:47:31.9725087+01:00: Reduce hidden_dim from 256 to 192 to test whether a smaller trunk generalizes better with linear heads. | FINAL_SCORE=37.324559, holdout_bad=0.057292, holdout_missing=0.1875, negative_false=0, avg_complexity_ratio=0.938974 | Rejected: FINAL_SCORE worsened from 30.365545 to 37.324559. Smaller hidden dimension underfit and increased heldout bad-equilibrium.
 - 2026-05-24T14:54:24.7680324+01:00: Increase hidden_dim mildly from 256 to 288, testing a middle ground between accepted 256 and rejected 384. | FINAL_SCORE=41.354263, holdout_bad=0.063802, holdout_missing=0.221354, negative_false=0, avg_complexity_ratio=0.905644 | Rejected: FINAL_SCORE worsened from 30.365545 to 41.354263. Mildly wider trunk improved train fit but badly worsened heldout equilibrium errors.
 - 2026-05-24T14:58:50.2389342+01:00: Lower effective_num_scrs floor from 8192 to 4096 to test whether more focused training improves verifier-facing behavior. | FINAL_SCORE=35.786251, holdout_bad=0.053385, holdout_missing=0.19401, negative_false=0, avg_complexity_ratio=0.967875 | Rejected: FINAL_SCORE worsened from 30.365545 to 35.786251. Smaller training set overfit train SCRs and worsened heldout equilibrium errors.
+
+## 2026-05-24T19:57:50.333635Z
+- Hypothesis: ramp equilibrium surrogate weight over first 20% epochs to stabilize table fitting then equilibrium shaping
+- Result: rejected. FINAL_SCORE 36.655354 vs baseline 31.008041.
+- Metrics: holdout_bad 0.059896 (worse), holdout_missing_good 0.177083 (slightly better), negative_false_success_rate 0.0 (kept).
+- Action: reverted code change in train.py; kept eval logs.

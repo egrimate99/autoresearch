@@ -1,0 +1,9 @@
+{
+  "num_scrs": 8192,
+  "seed": 0,
+  "train_loss": 1.091987133026123,
+  "table_acc": 0.6379891633987427,
+  "size_acc": 0.8583984375,
+  "checkpoint": "results/latest/checkpoint.pt",
+  "device": "cpu"
+}

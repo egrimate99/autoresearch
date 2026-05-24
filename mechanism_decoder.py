@@ -105,7 +105,37 @@ def _ensure_singleton_target_coverage(
         )
         adjusted[profile] = outcome
         candidates.pop(best_index)
+
+    for theta in np.flatnonzero(singleton_states):
+        theta = int(theta)
+        outcome = int(np.argmax(scr.target_mask[theta]))
+        for profile in itertools.product(*(range(size) for size in message_sizes)):
+            if int(adjusted[profile]) == outcome:
+                continue
+            if _is_profile_stable(adjusted, message_sizes, scr, theta, profile):
+                adjusted[profile] = outcome
     return adjusted
+
+
+def _is_profile_stable(
+    outcome_table: np.ndarray,
+    message_sizes: tuple[int, ...],
+    scr: SocialChoiceRule,
+    theta: int,
+    profile: tuple[int, ...],
+) -> bool:
+    outcome = int(outcome_table[profile])
+    for agent in range(scr.n_agents):
+        current_utility = scr.utility(theta, agent, outcome)
+        for message in range(message_sizes[agent]):
+            if message == profile[agent]:
+                continue
+            deviated = list(profile)
+            deviated[agent] = message
+            deviated_outcome = int(outcome_table[tuple(deviated)])
+            if scr.utility(theta, agent, deviated_outcome) > current_utility + 1.0e-9:
+                return False
+    return True
 
 
 def _singleton_stability_cost(
